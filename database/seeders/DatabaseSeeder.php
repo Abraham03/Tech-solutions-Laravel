@@ -14,7 +14,7 @@ class DatabaseSeeder extends Seeder
         // 1. Crear el usuario Administrador (Tú)
         User::create([
             'name' => 'Admin Tech Solutions',
-            'email' => 'admin@techsolutions.management',
+            'email' => 'admin@techsolutions.com',
             'password' => Hash::make('password123'), // Contraseña segura hasheada
             'role' => 'admin',
         ]);

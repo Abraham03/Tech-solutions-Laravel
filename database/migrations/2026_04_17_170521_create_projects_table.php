@@ -12,10 +12,16 @@ return new class extends Migration
             $table->id();
             $table->foreignId('client_id')->constrained('clients')->cascadeOnDelete();
             $table->string('name', 150);
-            $table->enum('type', ['web', 'flutter_app', 'backend', 'other']);
+            
+            // ESCALABILIDAD: Cambiamos enum por string. La validación la hace tu código PHP.
+            $table->string('type', 50); 
+            
             $table->decimal('total_price', 10, 2);
             $table->string('currency', 3)->default('MXN');
-            $table->enum('status', ['quoted', 'development', 'completed', 'suspended']);
+            
+            // ESCALABILIDAD: Cambiamos enum por string.
+            $table->string('status', 50)->default('quoted'); 
+            
             $table->timestamps();
             $table->softDeletes();
         });

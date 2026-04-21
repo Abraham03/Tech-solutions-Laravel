@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\StripeController;
+use App\Http\Controllers\DashboardController;
 use App\Enums\RoleEnum;
 
 // ==========================================
@@ -27,14 +28,13 @@ Route::middleware('auth:api')->group(function () {
     // ------------------------------------------
     Route::middleware('role:' . RoleEnum::ADMIN->value)->prefix('admin')->group(function () {
         
-        Route::get('/dashboard-stats', function () {
-            return response()->json(['message' => 'Bienvenido a la zona de Dueño, Jefe.']);
-        });
+        Route::get('/dashboard', [DashboardController::class, 'index']);
 
         // Generación de links de pago (Directamente en el grupo admin, sin anidamientos extra)
         Route::post('/stripe/create-session', [StripeController::class, 'createSession']);
 
         // Tu Core CRUD
+        Route::apiResource('users', \App\Http\Controllers\UserController::class);
         Route::apiResource('clients', \App\Http\Controllers\ClientController::class);
         Route::apiResource('projects', \App\Http\Controllers\ProjectController::class);
         Route::apiResource('services', \App\Http\Controllers\ServiceController::class);
