@@ -42,4 +42,13 @@ class Project extends Model
             'total_price' => 'decimal:2',
         ];
     }
+    public function getPaidAmountAttribute() {
+        return $this->payments()->where('status', 'COMPLETED')->sum('amount');
+    }
+
+    public function getBalanceAttribute()
+    {
+        $balance = $this->total_price - $this->paid_amount;
+        return $balance > 0 ? $balance : 0; // Evita mostrar saldos negativos
+    }
 }

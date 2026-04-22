@@ -45,4 +45,15 @@ class Service extends Model
             'price_mxn' => 'decimal:2',
         ];
     }
+
+    public function getMarginAttribute()
+    {
+        $cost = $this->cost_mxn ?? 0; 
+        return $this->price_mxn - $cost;
+    }
+
+    public function getProfitPercentageAttribute() {
+        if ($this->price_mxn <= 0) return 0;
+        return ($this->margin / $this->price_mxn) * 100;
+    }
 }
