@@ -142,16 +142,16 @@ class DashboardService
     {
         return Service::with('client')
             ->where('status', ServiceStatusEnum::ACTIVE)
-            ->whereNotNull('expires_at')
-            ->whereBetween('expires_at', [now(), now()->addDays(30)])
-            ->orderBy('expires_at', 'asc')
+            ->whereNotNull('expiration_date')
+            ->whereBetween('expiration_date', [now(), now()->addDays(30)])
+            ->orderBy('expiration_date', 'asc')
             ->get()
             ->map(function ($service) {
                 return [
                     'id' => $service->id,
                     'name' => $service->name,
                     'client_name' => $service->client->name ?? 'Sin Cliente',
-                    'expires_at' => $service->expires_at->format('Y-m-d'),
+                    'expiration_date' => $service->expiration_date->format('Y-m-d'),
                     'profit_margin' => (float) $service->margin,
                 ];
             })->toArray();
