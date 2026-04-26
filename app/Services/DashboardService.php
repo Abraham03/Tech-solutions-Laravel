@@ -19,52 +19,61 @@ class DashboardService
     {
         return [
             'metrics' => [
-                'activeClients' => $this->getActiveClientsCount(),
-                'activeProjects' => $this->getActiveProjectsCount(),
-                'pendingInvoices' => $this->getPendingInvoicesCount(),
-                
-                // Métricas MRR y Profit
-                'mrr' => $this->calculateRealMRR(),
-                'monthlyProfit' => $this->calculateMonthlyProfit(),
-                'totalReceivable' => $this->calculateTotalReceivable(),
+                // Métricas Base
+                'totalClients'       => $this->getTotalClientsCount(),
+                'activeProjects'     => $this->getActiveProjectsCount(),
+                'pendingInvoices'    => $this->getPendingInvoicesCount(),
 
-                // NUEVO: Historial de Ingresos Desglosado
-                'monthlyRevenue' => $this->getRevenueByPeriod('month'),
-                'annualRevenue' => $this->getRevenueByPeriod('year'),
-                'totalRevenue' => $this->getRevenueByPeriod('all'),
+                // Métricas Financieras
+                'mrr'                => $this->calculateRealMRR(),
+                'monthlyProfit'      => $this->calculateMonthlyProfit(),
+                'totalReceivable'    => $this->calculateTotalReceivable(),
+
+                // NUEVO: Proyección anual basada en MRR actual
+                'annualProjection'   => $this->calculateRealMRR() * 12,
+
+                // NUEVO: Total histórico cobrado (todos los pagos completados)
+                'totalCollected'     => $this->calculateTotalCollected(),
+
+                // NUEVO: Conteo de servicios por vencer en próximos 30 días
+                'servicesExpiringSoon' => $this->getExpiringServices(30, countOnly: true),
             ],
-            'recentProjects' => $this->getRecentProjects(),
-            'expiringServices' => $this->getExpiringServices(),
-            'revenueChart' => $this->getRevenueHistory(),
-            
-            // NUEVO: Registro de mensajes y alertas enviadas
+
+            // Data Arrays para el Frontend
+            'recentProjects'     => $this->getRecentProjects(),
+            'expiringServices'   => $this->getExpiringServices(30),
+            'revenueChart'       => $this->getRevenueHistory(),
+
+            // NUEVO: Historial de ingresos agrupado por año
+            'revenueByYear'      => $this->getRevenueByYear(),
+
+            // NUEVO: Ingresos del mes actual
+            'revenueThisMonth'   => $this->getRevenueByPeriod('month'),
+
+            // NUEVO: Ingresos del año actual
+            'revenueThisYear'    => $this->getRevenueByPeriod('year'),
+
+            // NUEVO: Notificaciones recientes enviadas
             'recentNotifications' => $this->getRecentNotifications(),
+
+            // NUEVO: Resumen de notificaciones por canal
+            'notificationsSummary' => $this->getNotificationsSummary(),
+
+            // NUEVO: Margen por servicio activo
+            'serviceMargins'     => $this->getServiceMargins(),
+
+            // NUEVO: LTV (valor de vida) por cliente
+            'clientLTV'          => $this->getClientLTV(),
         ];
     }
 
     // ==========================================
-    // NUEVAS FUNCIONES DE INGRESOS
+    // MÉTRICAS BASE
     // ==========================================
-    private function getRevenueByPeriod(string $period): float
+
+    private function getTotalClientsCount(): int
     {
-        $query = Payment::where('status', PaymentStatusEnum::COMPLETED);
-
-        if ($period === 'month') {
-            $query->whereYear('paid_at', now()->year)->whereMonth('paid_at', now()->month);
-        } elseif ($period === 'year') {
-            $query->whereYear('paid_at', now()->year);
-        }
-
-        return (float) $query->sum('amount');
-    }
-
-    // ==========================================
-    // MÉTRICAS BASE ORIGINALES
-    // ==========================================
-
-    private function getActiveClientsCount(): int
-    {
-        return Client::count(); 
+        return Client::count();
     }
 
     private function getActiveProjectsCount(): int
@@ -78,11 +87,11 @@ class DashboardService
     }
 
     // ==========================================
-    // CÁLCULOS FINANCIEROS Y MÁRGENES
+    // CÁLCULOS FINANCIEROS
     // ==========================================
 
     /**
-     * MRR Real: Suma los precios dividiéndolos según su ciclo de facturación.
+     * MRR Real: precio dividido según ciclo de facturación.
      */
     private function calculateRealMRR(): float
     {
@@ -92,18 +101,18 @@ class DashboardService
         foreach ($services as $service) {
             $mrr += match ($service->billing_cycle) {
                 'monthly'    => $service->price_mxn,
-                'quarterly'  => $service->price_mxn / 3,  // Póliza cada 3 meses
+                'quarterly'  => $service->price_mxn / 3,
                 'annually'   => $service->price_mxn / 12,
                 'biennially' => $service->price_mxn / 24,
-                default      => 0, // Pagos únicos no suman al MRR
+                default      => 0,
             };
         }
 
-        return (float) $mrr;
+        return round((float) $mrr, 2);
     }
 
     /**
-     * Ganancia Mensual: Margen (Precio - Costo) llevado a formato mensual.
+     * Ganancia mensual: margen (precio - costo) llevado a mensual.
      */
     private function calculateMonthlyProfit(): float
     {
@@ -111,115 +120,270 @@ class DashboardService
         $profit = 0;
 
         foreach ($services as $service) {
+            $margin = $service->price_mxn - $service->cost_mxn;
             $profit += match ($service->billing_cycle) {
-                'monthly'    => $service->margin,
-                'quarterly'  => $service->margin / 3,  // Ganancia de la póliza dividida en 3 meses
-                'annually'   => $service->margin / 12,
-                'biennially' => $service->margin / 24,
+                'monthly'    => $margin,
+                'quarterly'  => $margin / 3,
+                'annually'   => $margin / 12,
+                'biennially' => $margin / 24,
                 default      => 0,
             };
         }
 
-        return (float) $profit;
+        return round((float) $profit, 2);
     }
 
     /**
-     * Cruce de Proyectos vs Pagos: Dinero pendiente por cobrar.
+     * Saldo pendiente: proyectos no completados vs pagos recibidos.
      */
     private function calculateTotalReceivable(): float
     {
-        // Eager Loading: Trae proyectos incompletos y SOLO sus pagos exitosos para no ahogar la DB
-        $projects = Project::with(['payments' => function ($query) {
-            $query->where('status', PaymentStatusEnum::COMPLETED);
+        $projects = Project::with(['payments' => function ($q) {
+            $q->where('status', PaymentStatusEnum::COMPLETED);
         }])->where('status', '!=', ProjectStatusEnum::COMPLETED)->get();
 
-        // Usamos el Accessor $project->balance que definimos en el Modelo
-        return (float) $projects->sum(fn($project) => $project->balance);
-    }
-
-    // ==========================================
-    // LISTAS Y DATOS ESTRUCTURADOS
-    // ==========================================
-
-    private function getRecentProjects(): array
-    {
-        return Project::orderBy('created_at', 'desc')
-            ->take(5)
-            ->get()
-            ->map(function ($project) {
-                return [
-                    'id' => $project->id,
-                    'name' => $project->name,
-                    'type' => $project->type->value ?? $project->type,
-                    'status' => $project->status->value ?? $project->status,
-                    'amount' => (float) $project->total_price,
-                    // Agregamos el balance para que el Front pueda pintar "Resta $X"
-                    'balance' => (float) $project->balance, 
-                ];
-            })->toArray();
+        return round((float) $projects->sum(fn($p) => $p->balance), 2);
     }
 
     /**
-     * Alertas de Vencimiento: Servicios en los próximos 30 días.
+     * NUEVO: Total histórico de pagos completados (todos los tiempos).
      */
-    private function getExpiringServices(): array
+    private function calculateTotalCollected(): float
     {
-        // 1. Cambiamos 'client' por 'project.client'
-        return Service::with('project.client')
-            ->where('status', ServiceStatusEnum::ACTIVE)
-            ->whereNotNull('expiration_date')
-            ->whereBetween('expiration_date', [now(), now()->addDays(30)])
-            ->orderBy('expiration_date', 'asc')
-            ->get()
-            ->map(function ($service) {
-                return [
-                    'id' => $service->id,
-                    'name' => $service->name,
-                    // 2. Navegamos a través del proyecto para llegar al nombre del cliente
-                    'client_name' => $service->project->client->name ?? 'Sin Cliente',
-                    'expiration_date' => $service->expiration_date->format('Y-m-d'),
-                    'profit_margin' => (float) $service->margin,
-                ];
-            })->toArray();
+        return round((float) Payment::where('status', PaymentStatusEnum::COMPLETED)->sum('amount'), 2);
+    }
+
+    // ==========================================
+    // HISTORIAL DE INGRESOS — FILTROS TEMPORALES
+    // ==========================================
+
+    /**
+     * NUEVO: Ingresos filtrados por período ('month' | 'year' | 'all').
+     */
+    private function getRevenueByPeriod(string $period): array
+    {
+        $query = Payment::where('status', PaymentStatusEnum::COMPLETED);
+
+        $query = match ($period) {
+            'month' => $query->whereYear('paid_at', now()->year)
+                             ->whereMonth('paid_at', now()->month),
+            'year'  => $query->whereYear('paid_at', now()->year),
+            default => $query,
+        };
+
+        return [
+            'total'  => round((float) $query->sum('amount'), 2),
+            'count'  => $query->count(),
+            'period' => $period,
+        ];
     }
 
     /**
-     * Historial para Gráficas: Agrupación SQL de pagos por mes.
+     * NUEVO: Ingresos totales agrupados por año.
+     */
+    private function getRevenueByYear(): array
+    {
+        return Payment::where('status', PaymentStatusEnum::COMPLETED)
+            ->select(
+                DB::raw('SUM(amount) as total'),
+                DB::raw('COUNT(*) as payments_count'),
+                DB::raw("YEAR(paid_at) as year")
+            )
+            ->groupBy('year')
+            ->orderBy('year', 'desc')
+            ->get()
+            ->map(fn($r) => [
+                'year'           => $r->year,
+                'total'          => (float) $r->total,
+                'payments_count' => (int) $r->payments_count,
+            ])
+            ->toArray();
+    }
+
+    /**
+     * Historial mensual para gráfica (últimos 12 meses).
      */
     private function getRevenueHistory(): array
     {
         return Payment::where('status', PaymentStatusEnum::COMPLETED)
             ->select(
                 DB::raw('SUM(amount) as total'),
-                // ¡Aquí cambiamos payment_date por paid_at!
-                DB::raw("DATE_FORMAT(paid_at, '%Y-%m') as month") 
+                DB::raw("DATE_FORMAT(paid_at, '%Y-%m') as month")
             )
             ->groupBy('month')
             ->orderBy('month', 'desc')
-            ->take(6)
+            ->take(12)
             ->get()
+            ->map(fn($r) => [
+                'month' => $r->month,
+                'total' => (float) $r->total,
+            ])
             ->toArray();
     }
 
+    // ==========================================
+    // SERVICIOS
+    // ==========================================
+
     /**
-     * Registro de mensajes de vencimiento enviados
+     * Servicios próximos a vencer. Soporta modo count-only para métricas.
+     */
+    private function getExpiringServices(int $days = 30, bool $countOnly = false): array|int
+    {
+        $query = Service::with('project.client')
+            ->where('status', ServiceStatusEnum::ACTIVE)
+            ->whereNotNull('expiration_date')
+            ->whereBetween('expiration_date', [now()->startOfDay(), now()->addDays($days)->endOfDay()])
+            ->orderBy('expiration_date', 'asc');
+
+        if ($countOnly) {
+            return $query->count();
+        }
+
+        return $query->get()->map(function ($service) {
+            $daysLeft = (int) now()->startOfDay()->diffInDays($service->expiration_date, false);
+            return [
+                'id'             => $service->id,
+                'name'           => $service->name,
+                'type'           => $service->type,
+                'provider'       => $service->provider,
+                'billing_cycle'  => $service->billing_cycle,
+                'client_name'    => $service->project->client->name ?? 'Sin Cliente',
+                'client_phone'   => $service->project->client->phone_number ?? null,
+                'expiration_date'=> $service->expiration_date->format('Y-m-d'),
+                'days_left'      => $daysLeft,
+                // NUEVO: semáforo de urgencia
+                'urgency'        => match(true) {
+                    $daysLeft <= 0  => 'expired',
+                    $daysLeft <= 7  => 'critical',
+                    $daysLeft <= 15 => 'warning',
+                    default         => 'ok',
+                },
+                'price_mxn'      => (float) $service->price_mxn,
+                'cost_mxn'       => (float) $service->cost_mxn,
+                'profit_margin'  => round((float) ($service->price_mxn - $service->cost_mxn), 2),
+            ];
+        })->toArray();
+    }
+
+    /**
+     * NUEVO: Margen de ganancia por cada servicio activo.
+     */
+    private function getServiceMargins(): array
+    {
+        return Service::with('project.client')
+            ->where('status', ServiceStatusEnum::ACTIVE)
+            ->get()
+            ->map(function ($service) {
+                $margin     = $service->price_mxn - $service->cost_mxn;
+                $divisor    = match ($service->billing_cycle) {
+                    'monthly'    => 1,
+                    'quarterly'  => 3,
+                    'annually'   => 12,
+                    'biennially' => 24,
+                    default      => 1,
+                };
+                return [
+                    'id'           => $service->id,
+                    'name'         => $service->name,
+                    'client_name'  => $service->project->client->name ?? '—',
+                    'billing_cycle'=> $service->billing_cycle,
+                    'price_mxn'    => (float) $service->price_mxn,
+                    'cost_mxn'     => (float) $service->cost_mxn,
+                    'margin_total' => round((float) $margin, 2),
+                    // MRR y margen mensualizado
+                    'mrr'          => round((float) $service->price_mxn / $divisor, 2),
+                    'margin_monthly'=> round((float) $margin / $divisor, 2),
+                ];
+            })->toArray();
+    }
+
+    // ==========================================
+    // PROYECTOS
+    // ==========================================
+
+    private function getRecentProjects(): array
+    {
+        return Project::with('client')
+            ->orderBy('created_at', 'desc')
+            ->take(5)
+            ->get()
+            ->map(fn($p) => [
+                'id'      => $p->id,
+                'name'    => $p->name,
+                'type'    => $p->type->value ?? $p->type,
+                'status'  => $p->status->value ?? $p->status,
+                'amount'  => (float) $p->total_price,
+                'balance' => (float) $p->balance,
+                // NUEVO: porcentaje cobrado
+                'paid_pct'=> $p->total_price > 0
+                    ? round(($p->total_price - $p->balance) / $p->total_price * 100, 1)
+                    : 100,
+            ])->toArray();
+    }
+
+    // ==========================================
+    // NOTIFICACIONES
+    // ==========================================
+
+    /**
+     * NUEVO: Últimas 20 notificaciones enviadas con datos del cliente y servicio.
      */
     private function getRecentNotifications(): array
     {
         return NotificationLog::with(['client', 'service'])
             ->orderBy('sent_at', 'desc')
-            ->take(5)
+            ->take(20)
             ->get()
-            ->map(function ($log) {
-                return [
-                    'id' => $log->id,
-                    'client_name' => $log->client->name ?? 'Desconocido',
-                    'service_name' => $log->service->name ?? 'N/A',
-                    'type' => $log->type, 
-                    'channel' => $log->channel ?? 'whatsapp', // Agregamos fallback
-                    'status' => $log->status ?? 'sent',       // Agregamos fallback
-                    'sent_time_ago' => $log->sent_at ? Carbon::parse($log->sent_at)->diffForHumans() : 'Pendiente',
-                ];
-            })->toArray();
+            ->map(fn($n) => [
+                'id'           => $n->id,
+                'type'         => $n->type,
+                'client_name'  => $n->client->name ?? '—',
+                'service_name' => $n->service->name ?? null,
+                'message_body' => $n->message_body,
+                'sent_at'      => Carbon::parse($n->sent_at)->format('Y-m-d H:i'),
+                // NUEVO: tiempo relativo legible
+                'sent_ago'     => Carbon::parse($n->sent_at)->diffForHumans(),
+            ])->toArray();
+    }
+
+    /**
+     * NUEVO: Conteo de notificaciones por canal (WhatsApp / Email / Push).
+     */
+    private function getNotificationsSummary(): array
+    {
+        $counts = NotificationLog::select('type', DB::raw('COUNT(*) as total'))
+            ->groupBy('type')
+            ->pluck('total', 'type')
+            ->toArray();
+
+        return [
+            'whatsapp' => (int) ($counts['whatsapp_reminder'] ?? 0),
+            'email'    => (int) ($counts['email_invoice']     ?? 0),
+            'push'     => (int) ($counts['push_alert']        ?? 0),
+            'total'    => array_sum($counts),
+        ];
+    }
+
+    // ==========================================
+    // CRUCE DE DATOS — LTV POR CLIENTE
+    // ==========================================
+
+    /**
+     * NUEVO: Valor de vida del cliente (suma de todos sus pagos completados).
+     */
+    private function getClientLTV(): array
+    {
+        return Client::withSum(['payments' => function ($q) {
+            $q->where('status', PaymentStatusEnum::COMPLETED);
+        }], 'amount')
+            ->orderByDesc('payments_sum_amount')
+            ->get()
+            ->map(fn($c) => [
+                'id'           => $c->id,
+                'name'         => $c->name,
+                'contact_name' => $c->contact_name,
+                'ltv'          => round((float) ($c->payments_sum_amount ?? 0), 2),
+            ])->toArray();
     }
 }
