@@ -10,11 +10,13 @@ class WhatsAppService
     protected string $baseUrl;
     protected string $token;
 
-    public function __construct()
+   public function __construct()
     {
-        $this->token = config('services.meta.whatsapp.token');
-        $phoneId = config('services.meta.whatsapp.phone_id');
-        $version = config('services.meta.whatsapp.version');
+        // Leemos directamente las llaves exactas que pusiste en tu .env
+        // El '' al final asegura que si no lo encuentra, asigne un texto vacío en lugar de null
+        $this->token = env('META_WHATSAPP_TOKEN', config('services.meta.whatsapp.token', ''));
+        $phoneId = env('META_WHATSAPP_PHONE_ID', config('services.meta.whatsapp.phone_id', ''));
+        $version = env('META_WHATSAPP_VERSION', config('services.meta.whatsapp.version', 'v25.0'));
         
         $this->baseUrl = "https://graph.facebook.com/{$version}/{$phoneId}/messages";
     }
