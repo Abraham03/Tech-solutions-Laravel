@@ -10,4 +10,4 @@ Artisan::command('inspire', function () {
 
 // NUESTRO TRABAJADOR INVISIBLE
 // Le decimos que ejecute el escaneo todos los días exactamente a la medianoche.
-Schedule::command('services:check-expiring')->dailyAt('00:00');
+Schedule::command('services:check-expiring')->dailyAt('17:00');
