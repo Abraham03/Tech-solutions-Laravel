@@ -17,6 +17,7 @@ class Service extends Model
         'name',
         'cost_mxn',
         'price_mxn',
+        'billing_cycle',
         'expiration_date',
         'status',
     ];

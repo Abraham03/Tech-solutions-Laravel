@@ -20,6 +20,7 @@ class UpdateServiceRequest extends FormRequest
             'name' => 'sometimes|required|string|max:150',
             'cost_mxn' => 'sometimes|required|numeric|min:0',
             'price_mxn' => 'sometimes|required|numeric|min:0',
+            'billing_cycle' => 'sometimes|in:monthly,quarterly,annually,biennially,one-time',
             'expiration_date' => 'sometimes|required|date',
             'status' => ['sometimes', 'required', new Enum(ServiceStatusEnum::class)],
         ];

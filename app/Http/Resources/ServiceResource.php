@@ -18,6 +18,7 @@ class ServiceResource extends JsonResource
             'name' => $this->name, // Ej. techsolutions.management
             'cost_mxn' => (float) $this->cost_mxn,
             'price_mxn' => (float) $this->price_mxn,
+            'billing_cycle' => $this->billing_cycle,
             'expiration_date' => $this->expiration_date->format('Y-m-d'),
             'status' => $this->status->value,
         ];

@@ -20,6 +20,7 @@ class StoreServiceRequest extends FormRequest
             'name' => 'required|string|max:150',
             'cost_mxn' => 'required|numeric|min:0',
             'price_mxn' => 'required|numeric|min:0',
+            'billing_cycle' => 'sometimes|in:monthly,quarterly,annually,biennially,one-time',
             'expiration_date' => 'sometimes|date',
             'status' => ['sometimes', new Enum(ServiceStatusEnum::class)],
         ];

@@ -26,6 +26,11 @@ class InfrastructureService
             $data['status'] = \App\Enums\ServiceStatusEnum::ACTIVE->value;
         }
 
+        // Valor por defecto para el ciclo de facturación
+        if (empty($data['billing_cycle'])) {
+            $data['billing_cycle'] = 'monthly';
+        }
+
         return Service::create($data);
     }
 
