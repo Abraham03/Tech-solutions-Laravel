@@ -140,7 +140,8 @@ class DashboardService
      */
     private function getExpiringServices(): array
     {
-        return Service::with('client')
+        // 1. Cambiamos 'client' por 'project.client'
+        return Service::with('project.client')
             ->where('status', ServiceStatusEnum::ACTIVE)
             ->whereNotNull('expiration_date')
             ->whereBetween('expiration_date', [now(), now()->addDays(30)])
@@ -150,7 +151,8 @@ class DashboardService
                 return [
                     'id' => $service->id,
                     'name' => $service->name,
-                    'client_name' => $service->client->name ?? 'Sin Cliente',
+                    // 2. Navegamos a través del proyecto para llegar al nombre del cliente
+                    'client_name' => $service->project->client->name ?? 'Sin Cliente',
                     'expiration_date' => $service->expiration_date->format('Y-m-d'),
                     'profit_margin' => (float) $service->margin,
                 ];
