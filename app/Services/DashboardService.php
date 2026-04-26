@@ -167,7 +167,8 @@ class DashboardService
         return Payment::where('status', PaymentStatusEnum::COMPLETED)
             ->select(
                 DB::raw('SUM(amount) as total'),
-                DB::raw("DATE_FORMAT(payment_date, '%Y-%m') as month")
+                // ¡Aquí cambiamos payment_date por paid_at!
+                DB::raw("DATE_FORMAT(paid_at, '%Y-%m') as month") 
             )
             ->groupBy('month')
             ->orderBy('month', 'desc')
