@@ -6,10 +6,12 @@ use App\Models\Client;
 use App\Models\Project;
 use App\Models\Service;
 use App\Models\Payment;
+use App\Models\NotificationLog;
 use App\Enums\ProjectStatusEnum;
 use App\Enums\ServiceStatusEnum;
 use App\Enums\PaymentStatusEnum;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class DashboardService
 {
@@ -17,21 +19,43 @@ class DashboardService
     {
         return [
             'metrics' => [
-                // Métricas Base
                 'activeClients' => $this->getActiveClientsCount(),
                 'activeProjects' => $this->getActiveProjectsCount(),
                 'pendingInvoices' => $this->getPendingInvoicesCount(),
                 
-                // Nuevas Métricas Financieras (Cruce Inteligente)
+                // Métricas MRR y Profit
                 'mrr' => $this->calculateRealMRR(),
                 'monthlyProfit' => $this->calculateMonthlyProfit(),
                 'totalReceivable' => $this->calculateTotalReceivable(),
+
+                // NUEVO: Historial de Ingresos Desglosado
+                'monthlyRevenue' => $this->getRevenueByPeriod('month'),
+                'annualRevenue' => $this->getRevenueByPeriod('year'),
+                'totalRevenue' => $this->getRevenueByPeriod('all'),
             ],
-            // Data Arrays para el Frontend
             'recentProjects' => $this->getRecentProjects(),
             'expiringServices' => $this->getExpiringServices(),
             'revenueChart' => $this->getRevenueHistory(),
+            
+            // NUEVO: Registro de mensajes y alertas enviadas
+            'recentNotifications' => $this->getRecentNotifications(),
         ];
+    }
+
+    // ==========================================
+    // NUEVAS FUNCIONES DE INGRESOS
+    // ==========================================
+    private function getRevenueByPeriod(string $period): float
+    {
+        $query = Payment::where('status', PaymentStatusEnum::COMPLETED);
+
+        if ($period === 'month') {
+            $query->whereYear('paid_at', now()->year)->whereMonth('paid_at', now()->month);
+        } elseif ($period === 'year') {
+            $query->whereYear('paid_at', now()->year);
+        }
+
+        return (float) $query->sum('amount');
     }
 
     // ==========================================
@@ -175,5 +199,27 @@ class DashboardService
             ->take(6)
             ->get()
             ->toArray();
+    }
+
+    /**
+     * Registro de mensajes de vencimiento enviados
+     */
+    private function getRecentNotifications(): array
+    {
+        return NotificationLog::with(['client', 'service'])
+            ->orderBy('sent_at', 'desc')
+            ->take(5)
+            ->get()
+            ->map(function ($log) {
+                return [
+                    'id' => $log->id,
+                    'client_name' => $log->client->name ?? 'Desconocido',
+                    'service_name' => $log->service->name ?? 'N/A',
+                    'type' => $log->type, 
+                    'channel' => $log->channel ?? 'whatsapp', // Agregamos fallback
+                    'status' => $log->status ?? 'sent',       // Agregamos fallback
+                    'sent_time_ago' => $log->sent_at ? Carbon::parse($log->sent_at)->diffForHumans() : 'Pendiente',
+                ];
+            })->toArray();
     }
 }
