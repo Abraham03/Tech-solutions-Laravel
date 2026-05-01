@@ -71,8 +71,9 @@ class StripeController extends Controller
                 $admin = \App\Models\User::find(1);
                 if ($admin) {
                     $admin->notify(new \App\Notifications\PaymentReceivedNotification($payment));
+                }
 
-                    // ======= 3. NUEVO: GUARDAR EN LA BASE DE DATOS =======
+                // ======= 3. NUEVO: GUARDAR EN LA BASE DE DATOS =======
                     NotificationLog::create([
                         'client_id' => $session->metadata->client_id,
                         'service_id' => $session->metadata->service_id,
@@ -82,8 +83,6 @@ class StripeController extends Controller
                         'status' => 'sent',
                         'sent_at' => now()
                     ]);
-                    // =======================================================
-                }
 
             } catch (\Illuminate\Validation\ValidationException $e) {
                 // Si la regla matemática de saldos lo rechaza
