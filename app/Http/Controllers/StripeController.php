@@ -83,7 +83,6 @@ class StripeController extends Controller
                     
                     'type' => 'push_alert',
                     'message_body' => "Pago de " . ($session->amount_total / 100) . " MXN recibido vía Stripe.",
-                    'status' => 'sent',
                     'sent_at' => now()
                 ]);
 
