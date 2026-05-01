@@ -67,24 +67,32 @@ class StripeController extends Controller
                     'paid_at' => now(),
                 ]);
 
+
+                // 2. NUEVO: GUARDAR EN LA BASE DE DATOS PRIMERO
+                NotificationLog::create([
+                    'client_id' => $session->metadata->client_id ?? null,
+                    'service_id' => $session->metadata->service_id ?? null,
+                    'type' => 'push_alert',
+                    'message_body' => "Pago de " . ($session->amount_total / 100) . " MXN recibido vía Stripe.",
+                    'sent_at' => now()
+                ]);
+
                 // 2. Si se guardó con éxito, te notificamos a ti (Usuario ID 1 - Administrador)
                 $admin = \App\Models\User::find(1);
                 if ($admin) {
                     $admin->notify(new \App\Notifications\PaymentReceivedNotification($payment));
                 }
 
-                // ======= 3. NUEVO: GUARDAR EN LA BASE DE DATOS =======
-                NotificationLog::create([
-                    // Le decimos "Si no existe client_id, manda null"
-                    'client_id' => $session->metadata->client_id ?? null,
-                    
-                    // Le decimos "Si no existe service_id, manda null"
-                    'service_id' => $session->metadata->service_id ?? null,
-                    
-                    'type' => 'push_alert',
-                    'message_body' => "Pago de " . ($session->amount_total / 100) . " MXN recibido vía Stripe.",
-                    'sent_at' => now()
-                ]);
+            // 3. NUEVO: INTENTAR ENVIAR PUSH (Aislado para que no rompa a Stripe)
+                try {
+                    $admin = \App\Models\User::find(1);
+                    if ($admin) {
+                        $admin->notify(new \App\Notifications\PaymentReceivedNotification($payment));
+                    }
+                } catch (\Exception $pushError) {
+                    // Si Firebase falla, solo dejamos una nota interna, pero le decimos a Stripe que todo salió bien
+                    \Illuminate\Support\Facades\Log::warning('Fallo Push de Firebase: ' . $pushError->getMessage());
+                }
 
             } catch (\Illuminate\Validation\ValidationException $e) {
                 // Si la regla matemática de saldos lo rechaza
