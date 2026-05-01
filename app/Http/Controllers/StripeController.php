@@ -8,6 +8,7 @@ use App\Services\PaymentService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Log;
+use App\Models\NotificationLog;
 use Stripe\Webhook;
 use Stripe\Exception\SignatureVerificationException;
 
@@ -70,6 +71,18 @@ class StripeController extends Controller
                 $admin = \App\Models\User::find(1);
                 if ($admin) {
                     $admin->notify(new \App\Notifications\PaymentReceivedNotification($payment));
+
+                    // ======= 3. NUEVO: GUARDAR EN LA BASE DE DATOS =======
+                    NotificationLog::create([
+                        'client_id' => $session->metadata->client_id,
+                        'service_id' => $session->metadata->service_id,
+                        'type' => 'push_alert',
+                        // <-- SOLUCIÓN: Separamos el texto de la matemática
+                        'message_body' => "Pago de " . ($session->amount_total / 100) . " MXN recibido vía Stripe.",
+                        'status' => 'sent',
+                        'sent_at' => now()
+                    ]);
+                    // =======================================================
                 }
 
             } catch (\Illuminate\Validation\ValidationException $e) {

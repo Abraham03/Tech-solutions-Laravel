@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use App\Services\InfrastructureService;
 use App\Services\StripeService;
 use App\Notifications\ServiceExpiringNotification;
+use App\Models\NotificationLog;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -55,6 +56,16 @@ class CheckExpiringServices extends Command
 
                 // 2. Disparamos la notificación pasando el servicio y el link generado
                 $client->notify(new ServiceExpiringNotification($service, $session->url));
+
+                // ======= 3. NUEVO: GUARDAR EN LA BASE DE DATOS =======
+                NotificationLog::create([
+                    'client_id' => $client->id,
+                    'service_id' => $service->id,
+                    'type' => 'whatsapp_reminder',
+                    'message_body' => "Aviso de vencimiento enviado para: {$service->name} ({$service->expiration_date->format('d-m-Y')}). Link de pago adjunto.",
+                    'status' => 'sent', // Asumimos sent si no tiró error
+                    'sent_at' => now()
+                ]);
 
                 $this->info("Notificación enviada a {$client->name} para el servicio {$service->name}");
 
