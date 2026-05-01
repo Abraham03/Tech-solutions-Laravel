@@ -74,15 +74,18 @@ class StripeController extends Controller
                 }
 
                 // ======= 3. NUEVO: GUARDAR EN LA BASE DE DATOS =======
-                    NotificationLog::create([
-                        'client_id' => $session->metadata->client_id,
-                        'service_id' => $session->metadata->service_id,
-                        'type' => 'push_alert',
-                        // <-- SOLUCIÓN: Separamos el texto de la matemática
-                        'message_body' => "Pago de " . ($session->amount_total / 100) . " MXN recibido vía Stripe.",
-                        'status' => 'sent',
-                        'sent_at' => now()
-                    ]);
+                NotificationLog::create([
+                    // Le decimos "Si no existe client_id, manda null"
+                    'client_id' => $session->metadata->client_id ?? null,
+                    
+                    // Le decimos "Si no existe service_id, manda null"
+                    'service_id' => $session->metadata->service_id ?? null,
+                    
+                    'type' => 'push_alert',
+                    'message_body' => "Pago de " . ($session->amount_total / 100) . " MXN recibido vía Stripe.",
+                    'status' => 'sent',
+                    'sent_at' => now()
+                ]);
 
             } catch (\Illuminate\Validation\ValidationException $e) {
                 // Si la regla matemática de saldos lo rechaza
