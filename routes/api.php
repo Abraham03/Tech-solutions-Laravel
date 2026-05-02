@@ -47,9 +47,8 @@ Route::middleware('auth:api')->group(function () {
     // ------------------------------------------
     Route::middleware('role:' . RoleEnum::CLIENT->value)->prefix('client')->group(function () {
         
-        Route::get('/my-projects', function () {
-            return response()->json(['message' => 'Aquí están tus proyectos, estimado cliente.']);
-        });
+        // Dashboard Principal del Portal del Cliente
+        Route::get('/dashboard', [\App\Http\Controllers\ClientPortal\ClientDashboardController::class, 'index']);
 
     });
 
