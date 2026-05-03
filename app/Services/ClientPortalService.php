@@ -48,13 +48,13 @@ class ClientPortalService
                                             $q->where('client_id', $client->id);
                                         })->where('status', ServiceStatusEnum::ACTIVE)->count(),
                 'pending_balance' => Project::where('client_id', $client->id)
-                                        ->sum('balance'),
+                                        ->sum('total_price'),
             ],
             // Últimos 5 proyectos
             'recent_projects' => Project::where('client_id', $client->id)
                                     ->orderBy('created_at', 'desc')
                                     ->take(5)
-                                    ->get(['id', 'name', 'type', 'status', 'total_price', 'balance']),
+                                    ->get(['id', 'name', 'type', 'status', 'total_price']),
             // Servicios activos
             'active_services' => Service::with('project:id,name')
                                     ->whereHas('project', function($q) use ($client) {
