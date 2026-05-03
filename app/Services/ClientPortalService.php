@@ -34,6 +34,17 @@ class ClientPortalService
     {
         $client = $this->getAuthenticatedClient();
 
+        // 1. Calculamos el total de la deuda (Suma de todos los proyectos)
+        $totalProjectsPrice = Project::where('client_id', $client->id)->sum('total_price');
+
+        // 2. Calculamos el total pagado (Suma de todos los pagos con estado 'completed')
+        $totalPaid = Payment::where('client_id', $client->id)
+                            ->where('status', 'completed') // ¡Importante! Solo restamos lo que ya se pagó
+                            ->sum('amount');
+
+        // 3. El saldo pendiente real es la resta (Deuda - Pagado)
+        $pendingBalance = $totalProjectsPrice - $totalPaid;
+
         return [
             'profile' => [
                 'name' => $client->name,
@@ -47,8 +58,8 @@ class ClientPortalService
                 'active_services' => Service::whereHas('project', function($q) use ($client) {
                                             $q->where('client_id', $client->id);
                                         })->where('status', ServiceStatusEnum::ACTIVE)->count(),
-                'pending_balance' => Project::where('client_id', $client->id)
-                                        ->sum('total_price'),
+                // Asignamos la variable calculada aquí
+                'pending_balance' => $pendingBalance,
             ],
             // Últimos 5 proyectos
             'recent_projects' => Project::where('client_id', $client->id)
