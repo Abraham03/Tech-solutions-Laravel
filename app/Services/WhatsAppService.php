@@ -11,15 +11,19 @@ class WhatsAppService
 
     protected string $token;
 
+    protected string $phoneId;
+
     public function __construct()
     {
-        // Leemos directamente las llaves exactas que pusiste en tu .env
-        // El '' al final asegura que si no lo encuentra, asigne un texto vacío en lugar de null
-        $this->token = env('META_WHATSAPP_TOKEN', config('services.meta.whatsapp.token', ''));
-        $phoneId = env('META_WHATSAPP_PHONE_ID', config('services.meta.whatsapp.phone_id', ''));
-        $version = env('META_WHATSAPP_VERSION', config('services.meta.whatsapp.version', 'v25.0'));
+        // config() y NO env(): env() solo lee el .env mientras la configuracion no
+        // este cacheada. En cuanto se ejecuta `php artisan config:cache` devuelve
+        // null, y este servicio empezaria a mandar peticiones sin token contra
+        // Meta, fallando en silencio en produccion.
+        $this->token = (string) config('services.meta.whatsapp.token', '');
+        $this->phoneId = (string) config('services.meta.whatsapp.phone_id', '');
+        $version = (string) config('services.meta.whatsapp.version', 'v25.0');
 
-        $this->baseUrl = "https://graph.facebook.com/{$version}/{$phoneId}/messages";
+        $this->baseUrl = "https://graph.facebook.com/{$version}/{$this->phoneId}/messages";
     }
 
     /**
@@ -61,6 +65,14 @@ class WhatsAppService
      */
     protected function sendRequest(array $payload)
     {
+        // Sin credenciales, Meta responderia 401 y el error real quedaria enterrado
+        // en el cuerpo de la respuesta. Mejor decir exactamente que falta.
+        if ($this->token === '' || $this->phoneId === '') {
+            Log::error('Falta META_WHATSAPP_TOKEN o META_WHATSAPP_PHONE_ID: no se envio el mensaje de WhatsApp.');
+
+            return false;
+        }
+
         $response = Http::withToken($this->token)->post($this->baseUrl, $payload);
 
         if ($response->failed()) {

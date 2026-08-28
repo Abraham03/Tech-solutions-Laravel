@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\PaymentStatusEnum;
 use App\Enums\PaymentTypeEnum;
+use App\Enums\RoleEnum;
 use App\Models\NotificationLog;
 use App\Models\Payment;
 use App\Models\Service;
@@ -15,6 +16,7 @@ use App\Services\StripeService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\Webhook;
@@ -173,12 +175,21 @@ class StripeController extends Controller
             Log::warning("Webhook {$event->id}: no se pudo guardar el NotificationLog: ".$e->getMessage());
         }
 
-        // 4. Te avisamos por push (Usuario ID 1 - Administrador).
+        // 4. Avisamos por push a los administradores.
         // Si Firebase falla, solo lo anotamos: a Stripe le decimos que todo salió bien.
         try {
-            $admin = User::find(1);
-            if ($admin) {
-                $admin->notify(new PaymentReceivedNotification($payment));
+            // Por rol y no por User::find(1): ese id era una suposicion. Si ese
+            // usuario cambiaba, se borraba o dejaba de ser administrador, el aviso
+            // desaparecia sin que nada lo dijera. Ademas ahora avisa a todos los
+            // administradores, no solo al primero.
+            $admins = User::where('role', RoleEnum::ADMIN->value)
+                ->whereNotNull('fcm_token')
+                ->get();
+
+            if ($admins->isEmpty()) {
+                Log::info("Webhook {$event->id}: ningun administrador tiene fcm_token registrado; no se envia push.");
+            } else {
+                Notification::send($admins, new PaymentReceivedNotification($payment));
             }
         } catch (\Exception $pushError) {
             Log::warning('Fallo Push de Firebase: '.$pushError->getMessage());

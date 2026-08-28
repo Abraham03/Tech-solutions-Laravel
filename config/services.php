@@ -41,4 +41,13 @@ return [
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
+    'meta' => [
+        'whatsapp' => [
+            'token' => env('META_WHATSAPP_TOKEN'),
+            'phone_id' => env('META_WHATSAPP_PHONE_ID'),
+            'version' => env('META_WHATSAPP_VERSION', 'v25.0'),
+            'webhook_verify_token' => env('META_WHATSAPP_WEBHOOK_VERIFY_TOKEN'),
+        ],
+    ],
+
 ];

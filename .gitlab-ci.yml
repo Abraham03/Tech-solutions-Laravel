@@ -212,17 +212,20 @@ deploy:produccion:
         $PHP_BIN artisan package:discover
         [ -L public/storage ] || $PHP_BIN artisan storage:link || echo 'aviso: no se pudo crear el symlink public/storage.'
 
-        # Aqui NO se cachea nada, a proposito, por dos razones concretas:
+        # Se cachea la configuracion y las vistas, pero NO las rutas.
         #
-        # 1. route:cache falla: routes/web.php declara '/' con una closure y
-        #    Laravel no puede serializarla ('Unable to prepare route [/] for
-        #    serialization'). Eso descarta tambien 'artisan optimize', que lo
-        #    incluye.
-        # 2. config:cache romperia WhatsApp en silencio: WhatsAppService lee
-        #    META_WHATSAPP_TOKEN con env() en tiempo de ejecucion, y env()
-        #    devuelve null en cuanto la configuracion esta cacheada. Cuando ese
-        #    servicio lea de config('services.meta...') se podra activar
-        #    'artisan config:cache' aqui.
+        # route:cache falla: routes/web.php declara '/' con una closure y Laravel
+        # no puede serializarla ('Unable to prepare route [/] for serialization').
+        # Eso descarta tambien 'artisan optimize', que lo incluye. Para poder
+        # activarlo habria que mover esa closure a un controlador.
+        #
+        # config:cache si es seguro desde que WhatsAppService lee de config() en
+        # vez de env(): ninguna clase de app/ llama env() en tiempo de ejecucion.
+        # Si algun dia se vuelve a introducir una, este cache la dejaria en null
+        # sin avisar. OJO: tras cambiar el .env del servidor a mano hay que
+        # volver a ejecutar este comando o los valores viejos siguen vigentes.
+        $PHP_BIN artisan config:cache
+        $PHP_BIN artisan view:cache
       "
     - curl -fsS -o /dev/null -w "healthcheck /up -> %{http_code}\n" "$APP_URL/up"
 

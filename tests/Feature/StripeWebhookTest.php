@@ -4,9 +4,12 @@ namespace Tests\Feature;
 
 use App\Enums\PaymentStatusEnum;
 use App\Enums\PaymentTypeEnum;
+use App\Enums\RoleEnum;
 use App\Models\Payment;
 use App\Models\Project;
 use App\Models\Service;
+use App\Models\User;
+use App\Notifications\PaymentReceivedNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
@@ -110,6 +113,41 @@ class StripeWebhookTest extends TestCase
         ]);
 
         $this->assertSame($expectedExpiration, $service->fresh()->expiration_date->toDateString());
+    }
+
+    /**
+     * El aviso va a los administradores con token de Firebase, no al usuario 1.
+     * Antes era User::find(1): un id supuesto que, al cambiar, dejaba de avisar
+     * sin que nada lo indicara.
+     */
+    public function test_the_push_goes_to_every_admin_with_a_firebase_token(): void
+    {
+        $conToken = User::factory()->create([
+            'role' => RoleEnum::ADMIN->value,
+            'fcm_token' => 'token-de-firebase',
+        ]);
+        $adminSinToken = User::factory()->create([
+            'role' => RoleEnum::ADMIN->value,
+            'fcm_token' => null,
+        ]);
+        $cliente = User::factory()->create([
+            'role' => RoleEnum::CLIENT->value,
+            'fcm_token' => 'token-de-cliente',
+        ]);
+
+        $project = Project::factory()->completed()->create(['total_price' => 25000]);
+        $service = Service::factory()->create(['project_id' => $project->id]);
+
+        $this->postSignedEvent($this->checkoutSessionEvent([
+            'client_id' => (string) $project->client_id,
+            'project_id' => (string) $project->id,
+            'service_id' => (string) $service->id,
+            'payment_type' => 'renewal',
+        ]))->assertOk();
+
+        Notification::assertSentTo($conToken, PaymentReceivedNotification::class);
+        Notification::assertNotSentTo($adminSinToken, PaymentReceivedNotification::class);
+        Notification::assertNotSentTo($cliente, PaymentReceivedNotification::class);
     }
 
     /**
