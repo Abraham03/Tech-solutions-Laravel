@@ -46,6 +46,36 @@ class InfrastructureService
     }
 
     /**
+     * Extiende la vigencia de un servicio un ciclo de facturación completo.
+     * Se usa cuando se confirma el pago de una renovación.
+     */
+    public function renewService(Service $service): Service
+    {
+        // Si aún no vence, encadenamos desde su fecha actual para no regalar días.
+        // Si ya venció, arrancamos el nuevo ciclo desde hoy.
+        $base = $service->expiration_date->isFuture()
+            ? $service->expiration_date->copy()
+            : Carbon::now();
+
+        $newExpiration = match ($service->billing_cycle) {
+            'monthly'    => $base->addMonth(),
+            'quarterly'  => $base->addMonths(3),
+            'annually'   => $base->addYear(),
+            'biennially' => $base->addYears(2),
+            default      => null, // 'one-time' no se renueva
+        };
+
+        if ($newExpiration) {
+            $service->update([
+                'expiration_date' => $newExpiration->toDateString(),
+                'status' => \App\Enums\ServiceStatusEnum::ACTIVE->value,
+            ]);
+        }
+
+        return $service;
+    }
+
+    /**
      * Obtiene los servicios que vencen en los próximos X días.
      */
     public function getExpiringServices(int $daysWarning = 7)

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Payment;
 use App\Models\Project;
 use App\Enums\PaymentStatusEnum;
+use App\Enums\PaymentTypeEnum;
 use App\Enums\ProjectStatusEnum;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
@@ -24,15 +25,22 @@ class PaymentService
             $data['paid_at'] = now();
         }
 
-        // REGLA DE NEGOCIO: Validar saldos si el pago es para un proyecto y está completado
-        if (!empty($data['project_id']) && ($data['status'] ?? '') === PaymentStatusEnum::COMPLETED->value) {
+        // REGLA DE NEGOCIO: Validar saldos si el pago abona al proyecto y está completado.
+        // Las renovaciones (dominio, hosting) son cobros recurrentes independientes del
+        // precio del proyecto, así que no se validan ni suman contra su total.
+        $esAbonoAProyecto = !empty($data['project_id'])
+            && ($data['payment_type'] ?? '') !== PaymentTypeEnum::RENEWAL->value
+            && ($data['status'] ?? '') === PaymentStatusEnum::COMPLETED->value;
+
+        if ($esAbonoAProyecto) {
             $project = Project::findOrFail($data['project_id']);
-            
-            // Calculamos cuánto se ha pagado hasta ahora
+
+            // Calculamos cuánto se ha pagado hasta ahora (sin contar renovaciones)
             $currentPaid = $project->payments()
                 ->where('status', PaymentStatusEnum::COMPLETED->value)
+                ->where('payment_type', '!=', PaymentTypeEnum::RENEWAL->value)
                 ->sum('amount');
-                
+
             $newTotal = $currentPaid + $data['amount'];
             $saldoPendiente = $project->total_price - $currentPaid;
 

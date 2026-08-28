@@ -43,7 +43,11 @@ class Project extends Model
         ];
     }
     public function getPaidAmountAttribute() {
-        return $this->payments()->where('status', 'COMPLETED')->sum('amount');
+        // Solo abonos al proyecto: las renovaciones de servicios no reducen su saldo.
+        return $this->payments()
+            ->where('status', \App\Enums\PaymentStatusEnum::COMPLETED->value)
+            ->where('payment_type', '!=', \App\Enums\PaymentTypeEnum::RENEWAL->value)
+            ->sum('amount');
     }
 
     public function getBalanceAttribute()

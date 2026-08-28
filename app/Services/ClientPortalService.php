@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Project;
 use App\Models\Service;
 use App\Models\Payment;
+use App\Enums\PaymentTypeEnum;
 use App\Enums\ProjectStatusEnum;
 use App\Enums\ServiceStatusEnum;
 
@@ -37,9 +38,11 @@ class ClientPortalService
         // 1. Calculamos el total de la deuda (Suma de todos los proyectos)
         $totalProjectsPrice = Project::where('client_id', $client->id)->sum('total_price');
 
-        // 2. Calculamos el total pagado (Suma de todos los pagos con estado 'completed')
+        // 2. Calculamos el total pagado (Suma de todos los pagos con estado 'completed').
+        // Excluimos las renovaciones: son cobros recurrentes de servicios, no abonos a la deuda.
         $totalPaid = Payment::where('client_id', $client->id)
                             ->where('status', 'completed') // ¡Importante! Solo restamos lo que ya se pagó
+                            ->where('payment_type', '!=', PaymentTypeEnum::RENEWAL->value)
                             ->sum('amount');
 
         // 3. El saldo pendiente real es la resta (Deuda - Pagado)
