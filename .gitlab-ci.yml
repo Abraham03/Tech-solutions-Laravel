@@ -188,6 +188,17 @@ deploy:produccion:
         # Carpetas que el repositorio no lleva porque estan vacias o son datos.
         mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
 
+        # A MANO y antes de cualquier artisan, no con 'artisan cache:clear'.
+        # build:vendor instala con --no-dev, asi que paquetes de desarrollo como
+        # laravel/pail ya no existen en vendor/. Si en el servidor sobrevive un
+        # packages.php generado cuando si estaban, Laravel intenta registrar
+        # PailServiceProvider al arrancar y muere con 'Class not found'. Eso
+        # tumba TODOS los comandos de artisan, incluido el que limpiaria la
+        # cache, asi que el unico camino es borrar los manifiestos con rm.
+        # package:discover los regenera unas lineas mas abajo.
+        rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
+        rm -f bootstrap/cache/config.php bootstrap/cache/routes-v7.php
+
         # Uno por uno y no 'optimize:clear': ese incluye cache:clear, que con
         # CACHE_STORE=database hace 'delete from cache'. Si esa tabla todavia no
         # existe (migrate es manual y va despues), tumbaba el deploy entero.
@@ -199,7 +210,7 @@ deploy:produccion:
         $PHP_BIN artisan cache:clear || echo 'aviso: cache:clear fallo; normal si aun no has corrido migrate.'
 
         $PHP_BIN artisan package:discover
-        [ -L public/storage ] || $PHP_BIN artisan storage:link
+        [ -L public/storage ] || $PHP_BIN artisan storage:link || echo 'aviso: no se pudo crear el symlink public/storage.'
 
         # Aqui NO se cachea nada, a proposito, por dos razones concretas:
         #
