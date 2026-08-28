@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use Stripe\StripeClient;
 use Stripe\Checkout\Session;
+use Stripe\StripeClient;
 
 class StripeService
 {
@@ -41,8 +41,8 @@ class StripeService
                 'quantity' => 1,
             ]],
             'mode' => 'payment',
-            'success_url' => config('app.url') . '/payment-success',
-            'cancel_url' => config('app.url') . '/payment-cancel',
+            'success_url' => config('app.url').'/payment-success',
+            'cancel_url' => config('app.url').'/payment-cancel',
             // Pasamos metadatos para que el Webhook sepa qué estamos pagando
             'metadata' => [
                 'client_id' => $data['client_id'],

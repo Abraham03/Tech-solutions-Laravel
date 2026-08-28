@@ -15,7 +15,7 @@ class AuthService
         $user = User::where('email', $credentials['email'])->first();
 
         // Verificamos si el usuario existe y si la contraseña coincide
-        if (!$user || !Hash::check($credentials['password'], $user->password)) {
+        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             return null;
         }
 
@@ -24,13 +24,13 @@ class AuthService
 
         return [
             'user' => [
-                'id'    => $user->id,
-                'name'  => $user->name,
+                'id' => $user->id,
+                'name' => $user->name,
                 'email' => $user->email,
-                'role'  => $user->role, // Vital para saber si es Admin o Cliente
+                'role' => $user->role, // Vital para saber si es Admin o Cliente
             ],
             'access_token' => $tokenResult->accessToken,
-            'token_type'   => 'Bearer',
+            'token_type' => 'Bearer',
         ];
     }
 

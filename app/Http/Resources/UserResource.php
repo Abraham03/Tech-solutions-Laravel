@@ -14,7 +14,7 @@ class UserResource extends JsonResource
             'name' => $this->name,
             'email' => $this->email,
             // Si el Enum está casteado, sacamos su valor literal
-            'role' => $this->role->value ?? $this->role, 
+            'role' => $this->role->value ?? $this->role,
             'created_at' => $this->created_at->format('Y-m-d H:i:s'),
         ];
     }

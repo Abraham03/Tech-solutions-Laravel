@@ -2,12 +2,12 @@
 
 namespace App\Http\Requests\Payment;
 
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\Enum;
-use Illuminate\Validation\Rule;
 use App\Enums\PaymentMethodEnum;
-use App\Enums\PaymentTypeEnum;
 use App\Enums\PaymentStatusEnum;
+use App\Enums\PaymentTypeEnum;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Enum;
 
 class UpdatePaymentRequest extends FormRequest
 {
@@ -29,7 +29,7 @@ class UpdatePaymentRequest extends FormRequest
             'payment_method' => ['sometimes', 'required', new Enum(PaymentMethodEnum::class)],
             'payment_type' => ['sometimes', 'required', new Enum(PaymentTypeEnum::class)],
             'status' => ['sometimes', new Enum(PaymentStatusEnum::class)],
-            
+
             // Regla especial: el ID de Stripe debe ser único, EXCEPTO para este mismo pago
             'stripe_payment_intent_id' => [
                 'nullable',
@@ -37,7 +37,7 @@ class UpdatePaymentRequest extends FormRequest
                 'max:100',
                 Rule::unique('payments', 'stripe_payment_intent_id')->ignore($paymentId),
             ],
-            
+
             'paid_at' => 'nullable|date',
         ];
     }

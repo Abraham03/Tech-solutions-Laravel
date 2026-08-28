@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\JsonResponse;
 use App\Services\DashboardService;
-use App\Traits\ApiResponseTrait; // Veo que tienes este trait en tu carpeta Traits
+use App\Traits\ApiResponseTrait;
+use Illuminate\Http\JsonResponse; // Veo que tienes este trait en tu carpeta Traits
 
 class DashboardController extends Controller
 {
@@ -25,7 +25,7 @@ class DashboardController extends Controller
     {
         try {
             $data = $this->dashboardService->getAdminSummary();
-            
+
             // Retornamos el JSON crudo que espera Angular directamente
             return response()->json($data, 200);
 
@@ -33,7 +33,7 @@ class DashboardController extends Controller
             // Manejo de errores profesional
             return response()->json([
                 'message' => 'Error al cargar el dashboard',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

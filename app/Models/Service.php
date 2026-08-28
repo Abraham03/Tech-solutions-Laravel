@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\ServiceStatusEnum;
+use App\Enums\ServiceTypeEnum;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -36,11 +38,12 @@ class Service extends Model
     {
         return $this->hasMany(Payment::class);
     }
+
     protected function casts(): array
     {
         return [
-            'type' => \App\Enums\ServiceTypeEnum::class,
-            'status' => \App\Enums\ServiceStatusEnum::class,
+            'type' => ServiceTypeEnum::class,
+            'status' => ServiceStatusEnum::class,
             'expiration_date' => 'date',
             'cost_mxn' => 'decimal:2',
             'price_mxn' => 'decimal:2',
@@ -49,12 +52,17 @@ class Service extends Model
 
     public function getMarginAttribute()
     {
-        $cost = $this->cost_mxn ?? 0; 
+        $cost = $this->cost_mxn ?? 0;
+
         return $this->price_mxn - $cost;
     }
 
-    public function getProfitPercentageAttribute() {
-        if ($this->price_mxn <= 0) return 0;
+    public function getProfitPercentageAttribute()
+    {
+        if ($this->price_mxn <= 0) {
+            return 0;
+        }
+
         return ($this->margin / $this->price_mxn) * 100;
     }
 }

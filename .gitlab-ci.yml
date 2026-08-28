@@ -1,0 +1,231 @@
+# CI/CD de Tech Solutions API: calidad, pruebas y despliegue a Hostinger.
+#
+# El despliegue es automatico solo desde `main`. Las migraciones son manuales:
+# tocan los pagos reales de clientes y conviene decidir el momento.
+#
+# Variables requeridas en GitLab (Settings > CI/CD > Variables), marcadas
+# "Protected" y "Masked" donde se pueda:
+#   SSH_PRIVATE_KEY  clave privada SSH en base64, en una sola linea
+#   SSH_HOST         host SSH de Hostinger
+#   SSH_USER         usuario SSH (u525153682)
+#   SSH_PORT         puerto SSH (en hosting compartido suele ser 65002)
+
+stages:
+  - calidad
+  - pruebas
+  # `test` en ingles y aqui en medio no es un descuido: las plantillas de
+  # seguridad de GitLab (Secret Detection, SAST) declaran sus jobs en ese stage
+  # y no se puede cambiar sin reescribirlas. Si falta, el pipeline ni siquiera
+  # arranca: «chosen stage test does not exist».
+  - test
+  - build
+  - deploy
+  - migrate
+
+variables:
+  # Raiz de la aplicacion Laravel: es donde vive `artisan`. El document root del
+  # subdominio es su subcarpeta public/, asi que app/, vendor/, storage/ y .env
+  # quedan fuera del alcance de HTTP.
+  DEPLOY_PATH: "/home/u525153682/domains/techsolutions.management/public_html/api"
+  APP_URL: "https://api.techsolutions.management"
+  # Ruta absoluta a PHP 8.3: el `php` del PATH puede apuntar a otra version
+  PHP_BIN: "/opt/alt/php83/usr/bin/php"
+  # Composer guarda aqui sus descargas para que la cache las conserve
+  COMPOSER_CACHE_DIR: "$CI_PROJECT_DIR/.composer-cache"
+
+# Un pipeline por cambio, no dos: en una rama con MR abierto corre el del MR.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+# Revision automatica de GitLab: secretos filtrados y analisis de seguridad.
+# Van como aviso, no como bloqueo: quien decide si un hallazgo importa es quien
+# revisa el MR.
+include:
+  - template: Security/Secret-Detection.gitlab-ci.yml
+  - template: Security/SAST.gitlab-ci.yml
+
+# ---------------------------------------------------------------- plantillas
+
+# PHP sin extensiones extra. Las pruebas corren sobre SQLite en memoria y
+# Composer descomprime con el binario `unzip`, asi que no hace falta compilar
+# nada: pdo_sqlite ya viene habilitado en la imagen oficial.
+.php:
+  image: php:8.3-cli
+  cache:
+    key:
+      files:
+        - composer.lock
+    paths:
+      - .composer-cache/
+      - vendor/
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git unzip > /dev/null
+    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+    - composer install --prefer-dist --no-interaction --no-progress
+
+# ---------------------------------------------------------------- calidad
+
+calidad:formato:
+  stage: calidad
+  extends: .php
+  # Bloqueante: el proyecto ya esta formateado con Pint, asi que cualquier
+  # archivo fuera de estilo detiene el pipeline antes de desplegar.
+  script:
+    # --test no corrige: falla y dice que archivo quedo fuera de estilo.
+    - ./vendor/bin/pint --test
+
+# Nota: no hay job de analisis estatico porque el proyecto todavia no tiene
+# Larastan. Para activarlo: `composer require --dev larastan/larastan`, crear
+# phpstan.neon y anadir aqui un job que corra `./vendor/bin/phpstan analyse`.
+
+# ---------------------------------------------------------------- pruebas
+
+pruebas:phpunit:
+  stage: pruebas
+  extends: .php
+  # Tope propio: sin el, un job atascado consume el timeout del proyecto entero.
+  timeout: 15m
+  script:
+    # Sin servicio de MySQL a proposito: phpunit.xml fija DB_CONNECTION=sqlite y
+    # DB_DATABASE=:memory:, asi que la suite levanta su propio esquema en RAM.
+    # Es lo que la hace correr en ~1 s y sin dependencias externas.
+    - cp .env.example .env
+    - php artisan key:generate
+    # Las llaves de Passport estan en .gitignore (/storage/*.key), asi que en un
+    # checkout limpio no existen. Se generan aqui para que cualquier prueba que
+    # llegue a tocar OAuth no se caiga por una llave ausente.
+    - php artisan passport:keys --force
+    - php artisan test
+
+# ---------------------------------------------------------------- build
+
+build:vendor:
+  stage: build
+  image: composer:2
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    # composer.lock fija las versiones, asi que no hay resolucion de
+    # dependencias: el runner solo descarga. Por eso es seguro ignorar los
+    # requisitos de plataforma (aqui no se ejecuta la app).
+    - composer install --no-dev --prefer-dist --no-interaction --no-progress --no-scripts --ignore-platform-reqs
+    - composer dump-autoload --no-dev --optimize --ignore-platform-reqs
+  artifacts:
+    expire_in: 1 hour
+    paths:
+      - vendor/
+
+# ---------------------------------------------------------------- deploy
+
+# Job oculto reutilizado via `extends`: prepara la clave SSH en el runner.
+.ssh_setup:
+  before_script:
+    - apk add --no-cache openssh-client rsync curl
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    # La clave esta guardada en base64 (una sola linea), se decodifica aqui
+    - echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_deploy
+    - chmod 600 ~/.ssh/id_deploy
+    - ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+    - |
+      cat >> ~/.ssh/config <<CFG
+      Host deploy
+        HostName $SSH_HOST
+        User $SSH_USER
+        Port $SSH_PORT
+        IdentityFile ~/.ssh/id_deploy
+        IdentitiesOnly yes
+      CFG
+    - chmod 600 ~/.ssh/config
+
+deploy:produccion:
+  stage: deploy
+  image: alpine:3.20
+  extends: .ssh_setup
+  needs:
+    - calidad:formato
+    - pruebas:phpunit
+    - build:vendor
+  environment:
+    name: production
+    url: https://api.techsolutions.management
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    # -rlvz en vez de -a: -a incluye permisos/owner/group, que en hosting
+    # compartido fallan porque no somos duenos del uid remoto. -l se mantiene
+    # para preservar symlinks.
+    # --delete sin --delete-excluded: las rutas de .rsyncignore quedan
+    # protegidas en el destino (.env, storage/ con las llaves de OAuth y los
+    # logs, y firebase_credentials.json no se tocan).
+    - rsync -rlvz --delete --exclude-from='.rsyncignore' ./ "deploy:$DEPLOY_PATH/"
+    - |
+      ssh deploy "
+        set -e
+        cd $DEPLOY_PATH
+
+        # .env no viaja en el rsync (esta en .rsyncignore) y se crea a mano la
+        # primera vez. Sin el, Laravel cae a sus valores por defecto y falla
+        # hablando de un database.sqlite que nadie pidio: mejor decirlo claro.
+        if [ ! -f .env ]; then
+          echo 'FALTA .env en el servidor.'
+          exit 1
+        fi
+
+        # Las credenciales de Firebase tampoco estan en el repositorio.
+        if [ ! -f firebase_credentials.json ]; then
+          echo 'AVISO: falta firebase_credentials.json; las notificaciones push no funcionaran.'
+        fi
+
+        # Carpetas que el repositorio no lleva porque estan vacias o son datos.
+        mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
+
+        # Uno por uno y no 'optimize:clear': ese incluye cache:clear, que con
+        # CACHE_STORE=database hace 'delete from cache'. Si esa tabla todavia no
+        # existe (migrate es manual y va despues), tumbaba el deploy entero.
+        # Los demas clears solo borran archivos.
+        $PHP_BIN artisan config:clear
+        $PHP_BIN artisan route:clear
+        $PHP_BIN artisan view:clear
+        $PHP_BIN artisan event:clear
+        $PHP_BIN artisan cache:clear || echo 'aviso: cache:clear fallo; normal si aun no has corrido migrate.'
+
+        $PHP_BIN artisan package:discover
+        [ -L public/storage ] || $PHP_BIN artisan storage:link
+
+        # Aqui NO se cachea nada, a proposito, por dos razones concretas:
+        #
+        # 1. route:cache falla: routes/web.php declara '/' con una closure y
+        #    Laravel no puede serializarla ('Unable to prepare route [/] for
+        #    serialization'). Eso descarta tambien 'artisan optimize', que lo
+        #    incluye.
+        # 2. config:cache romperia WhatsApp en silencio: WhatsAppService lee
+        #    META_WHATSAPP_TOKEN con env() en tiempo de ejecucion, y env()
+        #    devuelve null en cuanto la configuracion esta cacheada. Cuando ese
+        #    servicio lea de config('services.meta...') se podra activar
+        #    'artisan config:cache' aqui.
+      "
+    - curl -fsS -o /dev/null -w "healthcheck /up -> %{http_code}\n" "$APP_URL/up"
+
+# ---------------------------------------------------------------- migrate
+
+# Job MANUAL: aparece con un boton play en el pipeline y espera a que le des
+# clic. Si no lo ejecutas, el pipeline se marca igual como exitoso.
+#
+# Manual a proposito: `migrate` toca la base con los pagos reales. Antes de
+# pulsarlo conviene tener el respaldo del dia.
+migrate:produccion:
+  stage: migrate
+  image: alpine:3.20
+  extends: .ssh_setup
+  needs:
+    - deploy:produccion
+  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - ssh deploy "cd $DEPLOY_PATH && $PHP_BIN artisan migrate --force"

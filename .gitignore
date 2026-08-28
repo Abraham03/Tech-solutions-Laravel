@@ -24,3 +24,6 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 firebase_credentials.json
+
+# Metadatos de Windows al descargar archivos
+*:Zone.Identifier

@@ -21,6 +21,7 @@ class ProjectService
     public function updateProject(Project $project, array $data): Project
     {
         $project->update($data);
+
         return $project;
     }
 

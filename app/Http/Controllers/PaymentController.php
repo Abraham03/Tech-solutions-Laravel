@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Payment;
 use App\Http\Requests\Payment\StorePaymentRequest;
 use App\Http\Requests\Payment\UpdatePaymentRequest;
 use App\Http\Resources\PaymentResource;
+use App\Models\Payment;
 use App\Services\PaymentService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +24,7 @@ class PaymentController extends Controller
     public function index(): JsonResponse
     {
         $payments = $this->paymentService->getAllPaginated();
-        
+
         return $this->successResponse(
             PaymentResource::collection($payments)->response()->getData(true),
             'Historial de pagos obtenido.'

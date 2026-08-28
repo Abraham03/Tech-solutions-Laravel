@@ -9,6 +9,6 @@ enum ServiceTypeEnum: string
     case VPS = 'vps';
     case MAINTENANCE = 'maintenance';
     case UPDATES = 'updates';
-    Case BACKUP = 'backup';
+    case BACKUP = 'backup';
     case OTHER = 'other';
 }

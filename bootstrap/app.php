@@ -1,9 +1,10 @@
 <?php
 
+use App\Http\Middleware\CheckRole;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -16,7 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // REGISTRAMOS EL ALIAS DE NUESTRO MIDDLEWARE DE ROLES
         $middleware->alias([
-            'role' => \App\Http\Middleware\CheckRole::class,
+            'role' => CheckRole::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -25,7 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($request->is('api/*')) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'No autenticado. Token inválido o ausente.'
+                    'message' => 'No autenticado. Token inválido o ausente.',
                 ], 401);
             }
         });

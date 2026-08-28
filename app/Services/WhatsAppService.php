@@ -8,16 +8,17 @@ use Illuminate\Support\Facades\Log;
 class WhatsAppService
 {
     protected string $baseUrl;
+
     protected string $token;
 
-   public function __construct()
+    public function __construct()
     {
         // Leemos directamente las llaves exactas que pusiste en tu .env
         // El '' al final asegura que si no lo encuentra, asigne un texto vacío en lugar de null
         $this->token = env('META_WHATSAPP_TOKEN', config('services.meta.whatsapp.token', ''));
         $phoneId = env('META_WHATSAPP_PHONE_ID', config('services.meta.whatsapp.phone_id', ''));
         $version = env('META_WHATSAPP_VERSION', config('services.meta.whatsapp.version', 'v25.0'));
-        
+
         $this->baseUrl = "https://graph.facebook.com/{$version}/{$phoneId}/messages";
     }
 
@@ -33,8 +34,8 @@ class WhatsAppService
             'template' => [
                 'name' => $templateName,
                 'language' => ['code' => $language],
-                'components' => $components
-            ]
+                'components' => $components,
+            ],
         ]);
     }
 
@@ -50,8 +51,8 @@ class WhatsAppService
             'type' => 'text',
             'text' => [
                 'preview_url' => true,
-                'body' => $message
-            ]
+                'body' => $message,
+            ],
         ]);
     }
 
@@ -63,7 +64,8 @@ class WhatsAppService
         $response = Http::withToken($this->token)->post($this->baseUrl, $payload);
 
         if ($response->failed()) {
-            Log::error('Error en Meta API: ' . $response->body());
+            Log::error('Error en Meta API: '.$response->body());
+
             return false;
         }
 

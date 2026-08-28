@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
-use Laravel\Passport\HasApiTokens;
+use App\Enums\RoleEnum;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Enums\RoleEnum;
+use Laravel\Passport\HasApiTokens;
 
 class User extends Authenticatable
 {

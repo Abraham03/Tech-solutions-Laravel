@@ -2,13 +2,13 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Auth;
-use App\Models\Project;
-use App\Models\Service;
-use App\Models\Payment;
 use App\Enums\PaymentTypeEnum;
 use App\Enums\ProjectStatusEnum;
 use App\Enums\ServiceStatusEnum;
+use App\Models\Payment;
+use App\Models\Project;
+use App\Models\Service;
+use Illuminate\Support\Facades\Auth;
 
 class ClientPortalService
 {
@@ -21,7 +21,7 @@ class ClientPortalService
         $user = Auth::user();
 
         // Utilizamos la relación 'clientProfile' que definiste en el modelo User
-        if (!$user->clientProfile) {
+        if (! $user->clientProfile) {
             abort(403, 'Tu cuenta no tiene un perfil de cliente asignado.');
         }
 
@@ -41,9 +41,9 @@ class ClientPortalService
         // 2. Calculamos el total pagado (Suma de todos los pagos con estado 'completed').
         // Excluimos las renovaciones: son cobros recurrentes de servicios, no abonos a la deuda.
         $totalPaid = Payment::where('client_id', $client->id)
-                            ->where('status', 'completed') // ¡Importante! Solo restamos lo que ya se pagó
-                            ->where('payment_type', '!=', PaymentTypeEnum::RENEWAL->value)
-                            ->sum('amount');
+            ->where('status', 'completed') // ¡Importante! Solo restamos lo que ya se pagó
+            ->where('payment_type', '!=', PaymentTypeEnum::RENEWAL->value)
+            ->sum('amount');
 
         // 3. El saldo pendiente real es la resta (Deuda - Pagado)
         $pendingBalance = $totalProjectsPrice - $totalPaid;
@@ -56,32 +56,32 @@ class ClientPortalService
             ],
             'metrics' => [
                 'active_projects' => Project::where('client_id', $client->id)
-                                        ->where('status', '!=', ProjectStatusEnum::COMPLETED)
-                                        ->count(),
-                'active_services' => Service::whereHas('project', function($q) use ($client) {
-                                            $q->where('client_id', $client->id);
-                                        })->where('status', ServiceStatusEnum::ACTIVE)->count(),
+                    ->where('status', '!=', ProjectStatusEnum::COMPLETED)
+                    ->count(),
+                'active_services' => Service::whereHas('project', function ($q) use ($client) {
+                    $q->where('client_id', $client->id);
+                })->where('status', ServiceStatusEnum::ACTIVE)->count(),
                 // Asignamos la variable calculada aquí
                 'pending_balance' => $pendingBalance,
             ],
             // Últimos 5 proyectos
             'recent_projects' => Project::where('client_id', $client->id)
-                                    ->orderBy('created_at', 'desc')
-                                    ->take(5)
-                                    ->get(['id', 'name', 'type', 'status', 'total_price']),
+                ->orderBy('created_at', 'desc')
+                ->take(5)
+                ->get(['id', 'name', 'type', 'status', 'total_price']),
             // Servicios activos
             'active_services' => Service::with('project:id,name')
-                                    ->whereHas('project', function($q) use ($client) {
-                                        $q->where('client_id', $client->id);
-                                    })
-                                    ->where('status', ServiceStatusEnum::ACTIVE)
-                                    ->get(['id', 'project_id', 'name', 'type', 'billing_cycle', 'price_mxn', 'expiration_date']),
+                ->whereHas('project', function ($q) use ($client) {
+                    $q->where('client_id', $client->id);
+                })
+                ->where('status', ServiceStatusEnum::ACTIVE)
+                ->get(['id', 'project_id', 'name', 'type', 'billing_cycle', 'price_mxn', 'expiration_date']),
             // Últimos 5 pagos realizados
             'recent_payments' => Payment::where('client_id', $client->id)
-                                    ->with(['project:id,name', 'service:id,name'])
-                                    ->orderBy('paid_at', 'desc')
-                                    ->take(5)
-                                    ->get(['id', 'project_id', 'service_id', 'amount', 'payment_method', 'status', 'paid_at']),
+                ->with(['project:id,name', 'service:id,name'])
+                ->orderBy('paid_at', 'desc')
+                ->take(5)
+                ->get(['id', 'project_id', 'service_id', 'amount', 'payment_method', 'status', 'paid_at']),
         ];
     }
 }

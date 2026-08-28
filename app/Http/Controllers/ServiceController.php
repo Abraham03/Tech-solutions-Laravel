@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Service;
 use App\Http\Requests\Service\StoreServiceRequest;
 use App\Http\Requests\Service\UpdateServiceRequest;
 use App\Http\Resources\ServiceResource;
+use App\Models\Service;
 use App\Services\InfrastructureService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +24,7 @@ class ServiceController extends Controller
     public function index(): JsonResponse
     {
         $services = $this->infrastructureService->getAllPaginated();
-        
+
         return $this->successResponse(
             ServiceResource::collection($services)->response()->getData(true),
             'Lista de servicios obtenida.'

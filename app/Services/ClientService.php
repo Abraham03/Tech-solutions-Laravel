@@ -22,6 +22,7 @@ class ClientService
     public function updateClient(Client $client, array $data): Client
     {
         $client->update($data);
+
         return $client;
     }
 

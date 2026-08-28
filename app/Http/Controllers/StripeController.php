@@ -2,29 +2,31 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Services\StripeService;
-use App\Services\PaymentService;
-use App\Services\InfrastructureService;
-use App\Traits\ApiResponseTrait;
 use App\Enums\PaymentStatusEnum;
 use App\Enums\PaymentTypeEnum;
-use Illuminate\Validation\ValidationException;
-use Illuminate\Support\Facades\Log;
 use App\Models\NotificationLog;
 use App\Models\Payment;
 use App\Models\Service;
 use App\Models\User;
 use App\Notifications\PaymentReceivedNotification;
-use Stripe\Webhook;
+use App\Services\InfrastructureService;
+use App\Services\PaymentService;
+use App\Services\StripeService;
+use App\Traits\ApiResponseTrait;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Stripe\Exception\SignatureVerificationException;
+use Stripe\Webhook;
 
 class StripeController extends Controller
 {
     use ApiResponseTrait;
 
     protected $stripeService;
+
     protected $paymentService;
+
     protected $infrastructureService;
 
     public function __construct(
@@ -43,6 +45,7 @@ class StripeController extends Controller
     public function createSession(Request $request)
     {
         $session = $this->stripeService->createCheckoutSession($request->all());
+
         return $this->successResponse(['url' => $session->url], 'Sesión de pago creada.');
     }
 
@@ -58,7 +61,8 @@ class StripeController extends Controller
         try {
             $event = Webhook::constructEvent($payload, $sig_header, $endpoint_secret);
         } catch (SignatureVerificationException $e) {
-            Log::warning('Webhook Stripe con firma inválida: ' . $e->getMessage());
+            Log::warning('Webhook Stripe con firma inválida: '.$e->getMessage());
+
             return response()->json(['error' => 'Firma inválida'], 400);
         }
 
@@ -70,7 +74,7 @@ class StripeController extends Controller
             'checkout.session.completed',
             'checkout.session.async_payment_succeeded' => $this->processCompletedSession($event),
 
-            'charge.refunded'               => $this->processRefund($event),
+            'charge.refunded' => $this->processRefund($event),
             'payment_intent.payment_failed' => $this->processFailedPayment($event),
 
             default => response()->json(['status' => 'success']),
@@ -92,6 +96,7 @@ class StripeController extends Controller
         // (payment_method_collection: if_required, pagos asíncronos, etc.)
         if ($session->payment_status !== 'paid') {
             Log::info("Sesión {$session->id} completada sin pago liquidado (payment_status: {$session->payment_status}). Se ignora.");
+
             return response()->json(['status' => 'ignored']);
         }
 
@@ -99,19 +104,21 @@ class StripeController extends Controller
         // contra el índice unique de stripe_payment_intent_id.
         if ($session->payment_intent && Payment::where('stripe_payment_intent_id', $session->payment_intent)->exists()) {
             Log::info("Pago {$session->payment_intent} ya registrado. Evento {$event->id} ignorado.");
+
             return response()->json(['status' => 'already_processed']);
         }
 
         // Stripe omite las claves de metadata con valor null, así que leemos a la defensiva.
-        $metadata    = $session->metadata ?? [];
-        $clientId    = $metadata['client_id'] ?? null;
-        $projectId   = $metadata['project_id'] ?? null;
-        $serviceId   = $metadata['service_id'] ?? null;
+        $metadata = $session->metadata ?? [];
+        $clientId = $metadata['client_id'] ?? null;
+        $projectId = $metadata['project_id'] ?? null;
+        $serviceId = $metadata['service_id'] ?? null;
         $paymentType = $metadata['payment_type'] ?? null;
-        $amount      = $session->amount_total / 100;
+        $amount = $session->amount_total / 100;
 
-        if (!$clientId || !$paymentType) {
+        if (! $clientId || ! $paymentType) {
             Log::error("Webhook {$event->id}: metadata incompleta en la sesión {$session->id}. No se puede registrar el pago.");
+
             return response()->json(['status' => 'invalid_metadata']);
         }
 
@@ -130,11 +137,13 @@ class StripeController extends Controller
             ]);
         } catch (ValidationException $e) {
             // Regla de negocio rechazada: reintentar no sirve de nada.
-            Log::error("Webhook {$event->id}: pago de \${$amount} rechazado por regla de negocio en la sesión {$session->id}. " . $e->getMessage());
+            Log::error("Webhook {$event->id}: pago de \${$amount} rechazado por regla de negocio en la sesión {$session->id}. ".$e->getMessage());
+
             return response()->json(['status' => 'rejected']);
         } catch (\Exception $e) {
             // Fallo potencialmente transitorio (BD caída): dejamos que Stripe reintente.
-            Log::error("Webhook {$event->id}: error registrando el pago de la sesión {$session->id}: " . $e->getMessage());
+            Log::error("Webhook {$event->id}: error registrando el pago de la sesión {$session->id}: ".$e->getMessage());
+
             return response()->json(['error' => 'Error interno procesando pago.'], 500);
         }
 
@@ -147,7 +156,7 @@ class StripeController extends Controller
                     $this->infrastructureService->renewService($service);
                 }
             } catch (\Exception $e) {
-                Log::error("Webhook {$event->id}: pago {$payment->id} guardado, pero falló la renovación del servicio {$serviceId}: " . $e->getMessage());
+                Log::error("Webhook {$event->id}: pago {$payment->id} guardado, pero falló la renovación del servicio {$serviceId}: ".$e->getMessage());
             }
         }
 
@@ -161,7 +170,7 @@ class StripeController extends Controller
                 'sent_at' => now(),
             ]);
         } catch (\Exception $e) {
-            Log::warning("Webhook {$event->id}: no se pudo guardar el NotificationLog: " . $e->getMessage());
+            Log::warning("Webhook {$event->id}: no se pudo guardar el NotificationLog: ".$e->getMessage());
         }
 
         // 4. Te avisamos por push (Usuario ID 1 - Administrador).
@@ -172,7 +181,7 @@ class StripeController extends Controller
                 $admin->notify(new PaymentReceivedNotification($payment));
             }
         } catch (\Exception $pushError) {
-            Log::warning('Fallo Push de Firebase: ' . $pushError->getMessage());
+            Log::warning('Fallo Push de Firebase: '.$pushError->getMessage());
         }
 
         return response()->json(['status' => 'success']);
@@ -190,14 +199,16 @@ class StripeController extends Controller
 
         $payment = Payment::where('stripe_payment_intent_id', $charge->payment_intent)->first();
 
-        if (!$payment) {
+        if (! $payment) {
             Log::warning("Webhook {$event->id}: reembolso de un cobro que no esta en la BD ({$charge->payment_intent}).");
+
             return response()->json(['status' => 'payment_not_found']);
         }
 
-        if (!$charge->refunded) {
+        if (! $charge->refunded) {
             $refunded = $charge->amount_refunded / 100;
             Log::warning("Webhook {$event->id}: reembolso PARCIAL de \${$refunded} sobre el pago {$payment->id}. Requiere ajuste manual.");
+
             return response()->json(['status' => 'partial_refund']);
         }
 

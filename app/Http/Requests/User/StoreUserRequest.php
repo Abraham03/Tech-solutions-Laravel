@@ -2,10 +2,10 @@
 
 namespace App\Http\Requests\User;
 
+use App\Enums\RoleEnum;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Rules\Password;
-use App\Enums\RoleEnum;
 
 class StoreUserRequest extends FormRequest
 {

@@ -2,15 +2,16 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Channels\WhatsAppChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
-use App\Notifications\Channels\WhatsAppChannel;
 
 class ServiceExpiringNotification extends Notification
 {
     use Queueable;
 
     protected $service;
+
     protected $paymentUrl;
 
     /**
@@ -34,7 +35,7 @@ class ServiceExpiringNotification extends Notification
         $dynamicUrlPart = str_replace('https://checkout.stripe.com/', '', $this->paymentUrl);
 
         return [
-            'to' => $notifiable->phone_number, 
+            'to' => $notifiable->phone_number,
             'template' => 'alerta_vencimiento_pago', // El nombre de la plantilla que acabas de crear
             'components' => [
                 // Variables del texto (Cuerpo)
@@ -43,7 +44,7 @@ class ServiceExpiringNotification extends Notification
                     'parameters' => [
                         ['type' => 'text', 'text' => $this->service->name],
                         ['type' => 'text', 'text' => $this->service->expiration_date->format('d-m-Y')],
-                    ]
+                    ],
                 ],
                 // Variable del botón (URL dinámica)
                 [
@@ -51,10 +52,10 @@ class ServiceExpiringNotification extends Notification
                     'sub_type' => 'url',
                     'index' => '0', // El índice 0 significa que es el primer botón
                     'parameters' => [
-                        ['type' => 'text', 'text' => $dynamicUrlPart]
-                    ]
-                ]
-            ]
+                        ['type' => 'text', 'text' => $dynamicUrlPart],
+                    ],
+                ],
+            ],
         ];
     }
 }

@@ -22,7 +22,7 @@ class PaymentServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->paymentService = new PaymentService();
+        $this->paymentService = new PaymentService;
     }
 
     /**

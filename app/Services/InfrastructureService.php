@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ServiceStatusEnum;
 use App\Models\Service;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -23,7 +24,7 @@ class InfrastructureService
 
         // Si no mandan estado, por defecto es 'active'
         if (empty($data['status'])) {
-            $data['status'] = \App\Enums\ServiceStatusEnum::ACTIVE->value;
+            $data['status'] = ServiceStatusEnum::ACTIVE->value;
         }
 
         // Valor por defecto para el ciclo de facturación
@@ -37,6 +38,7 @@ class InfrastructureService
     public function updateService(Service $service, array $data): Service
     {
         $service->update($data);
+
         return $service;
     }
 
@@ -55,9 +57,9 @@ class InfrastructureService
     {
         $cutoff = Carbon::now()->subDays($graceDays)->toDateString();
 
-        return Service::where('status', \App\Enums\ServiceStatusEnum::ACTIVE->value)
+        return Service::where('status', ServiceStatusEnum::ACTIVE->value)
             ->whereDate('expiration_date', '<', $cutoff)
-            ->update(['status' => \App\Enums\ServiceStatusEnum::EXPIRED->value]);
+            ->update(['status' => ServiceStatusEnum::EXPIRED->value]);
     }
 
     /**
@@ -73,17 +75,17 @@ class InfrastructureService
             : Carbon::now();
 
         $newExpiration = match ($service->billing_cycle) {
-            'monthly'    => $base->addMonth(),
-            'quarterly'  => $base->addMonths(3),
-            'annually'   => $base->addYear(),
+            'monthly' => $base->addMonth(),
+            'quarterly' => $base->addMonths(3),
+            'annually' => $base->addYear(),
             'biennially' => $base->addYears(2),
-            default      => null, // 'one-time' no se renueva
+            default => null, // 'one-time' no se renueva
         };
 
         if ($newExpiration) {
             $service->update([
                 'expiration_date' => $newExpiration->toDateString(),
-                'status' => \App\Enums\ServiceStatusEnum::ACTIVE->value,
+                'status' => ServiceStatusEnum::ACTIVE->value,
             ]);
         }
 
@@ -95,11 +97,11 @@ class InfrastructureService
      */
     public function getExpiringServices(int $daysWarning = 7)
     {
-        $targetDate = \Carbon\Carbon::now()->addDays($daysWarning)->toDateString();
+        $targetDate = Carbon::now()->addDays($daysWarning)->toDateString();
 
         // Reutilizamos el Eager Loading para traer los datos del cliente y proyecto
         return Service::with(['project.client'])
-            ->where('status', \App\Enums\ServiceStatusEnum::ACTIVE->value)
+            ->where('status', ServiceStatusEnum::ACTIVE->value)
             ->whereDate('expiration_date', '<=', $targetDate)
             ->get();
     }

@@ -2,16 +2,16 @@
 
 namespace App\Services;
 
-use App\Models\Client;
-use App\Models\Project;
-use App\Models\Service;
-use App\Models\Payment;
-use App\Models\NotificationLog;
+use App\Enums\PaymentStatusEnum;
 use App\Enums\ProjectStatusEnum;
 use App\Enums\ServiceStatusEnum;
-use App\Enums\PaymentStatusEnum;
-use Illuminate\Support\Facades\DB;
+use App\Models\Client;
+use App\Models\NotificationLog;
+use App\Models\Payment;
+use App\Models\Project;
+use App\Models\Service;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class DashboardService
 {
@@ -20,38 +20,38 @@ class DashboardService
         return [
             'metrics' => [
                 // Métricas Base
-                'totalClients'       => $this->getTotalClientsCount(),
-                'activeProjects'     => $this->getActiveProjectsCount(),
-                'pendingInvoices'    => $this->getPendingInvoicesCount(),
+                'totalClients' => $this->getTotalClientsCount(),
+                'activeProjects' => $this->getActiveProjectsCount(),
+                'pendingInvoices' => $this->getPendingInvoicesCount(),
 
                 // Métricas Financieras
-                'mrr'                => $this->calculateRealMRR(),
-                'monthlyProfit'      => $this->calculateMonthlyProfit(),
-                'totalReceivable'    => $this->calculateTotalReceivable(),
+                'mrr' => $this->calculateRealMRR(),
+                'monthlyProfit' => $this->calculateMonthlyProfit(),
+                'totalReceivable' => $this->calculateTotalReceivable(),
 
                 // NUEVO: Proyección anual basada en MRR actual
-                'annualProjection'   => $this->calculateRealMRR() * 12,
+                'annualProjection' => $this->calculateRealMRR() * 12,
 
                 // NUEVO: Total histórico cobrado (todos los pagos completados)
-                'totalCollected'     => $this->calculateTotalCollected(),
+                'totalCollected' => $this->calculateTotalCollected(),
 
                 // NUEVO: Conteo de servicios por vencer en próximos 30 días
                 'servicesExpiringSoon' => $this->getExpiringServices(30, countOnly: true),
             ],
 
             // Data Arrays para el Frontend
-            'recentProjects'     => $this->getRecentProjects(),
-            'expiringServices'   => $this->getExpiringServices(30),
-            'revenueChart'       => $this->getRevenueHistory(),
+            'recentProjects' => $this->getRecentProjects(),
+            'expiringServices' => $this->getExpiringServices(30),
+            'revenueChart' => $this->getRevenueHistory(),
 
             // NUEVO: Historial de ingresos agrupado por año
-            'revenueByYear'      => $this->getRevenueByYear(),
+            'revenueByYear' => $this->getRevenueByYear(),
 
             // NUEVO: Ingresos del mes actual
-            'revenueThisMonth'   => $this->getRevenueByPeriod('month'),
+            'revenueThisMonth' => $this->getRevenueByPeriod('month'),
 
             // NUEVO: Ingresos del año actual
-            'revenueThisYear'    => $this->getRevenueByPeriod('year'),
+            'revenueThisYear' => $this->getRevenueByPeriod('year'),
 
             // NUEVO: Notificaciones recientes enviadas
             'recentNotifications' => $this->getRecentNotifications(),
@@ -60,10 +60,10 @@ class DashboardService
             'notificationsSummary' => $this->getNotificationsSummary(),
 
             // NUEVO: Margen por servicio activo
-            'serviceMargins'     => $this->getServiceMargins(),
+            'serviceMargins' => $this->getServiceMargins(),
 
             // NUEVO: LTV (valor de vida) por cliente
-            'clientLTV'          => $this->getClientLTV(),
+            'clientLTV' => $this->getClientLTV(),
         ];
     }
 
@@ -100,11 +100,11 @@ class DashboardService
 
         foreach ($services as $service) {
             $mrr += match ($service->billing_cycle) {
-                'monthly'    => $service->price_mxn,
-                'quarterly'  => $service->price_mxn / 3,
-                'annually'   => $service->price_mxn / 12,
+                'monthly' => $service->price_mxn,
+                'quarterly' => $service->price_mxn / 3,
+                'annually' => $service->price_mxn / 12,
                 'biennially' => $service->price_mxn / 24,
-                default      => 0,
+                default => 0,
             };
         }
 
@@ -122,11 +122,11 @@ class DashboardService
         foreach ($services as $service) {
             $margin = $service->price_mxn - $service->cost_mxn;
             $profit += match ($service->billing_cycle) {
-                'monthly'    => $margin,
-                'quarterly'  => $margin / 3,
-                'annually'   => $margin / 12,
+                'monthly' => $margin,
+                'quarterly' => $margin / 3,
+                'annually' => $margin / 12,
                 'biennially' => $margin / 24,
-                default      => 0,
+                default => 0,
             };
         }
 
@@ -142,7 +142,7 @@ class DashboardService
             $q->where('status', PaymentStatusEnum::COMPLETED);
         }])->where('status', '!=', ProjectStatusEnum::COMPLETED)->get();
 
-        return round((float) $projects->sum(fn($p) => $p->balance), 2);
+        return round((float) $projects->sum(fn ($p) => $p->balance), 2);
     }
 
     /**
@@ -166,14 +166,14 @@ class DashboardService
 
         $query = match ($period) {
             'month' => $query->whereYear('paid_at', now()->year)
-                             ->whereMonth('paid_at', now()->month),
-            'year'  => $query->whereYear('paid_at', now()->year),
+                ->whereMonth('paid_at', now()->month),
+            'year' => $query->whereYear('paid_at', now()->year),
             default => $query,
         };
 
         return [
-            'total'  => round((float) $query->sum('amount'), 2),
-            'count'  => $query->count(),
+            'total' => round((float) $query->sum('amount'), 2),
+            'count' => $query->count(),
             'period' => $period,
         ];
     }
@@ -187,14 +187,14 @@ class DashboardService
             ->select(
                 DB::raw('SUM(amount) as total'),
                 DB::raw('COUNT(*) as payments_count'),
-                DB::raw("YEAR(paid_at) as year")
+                DB::raw('YEAR(paid_at) as year')
             )
             ->groupBy('year')
             ->orderBy('year', 'desc')
             ->get()
-            ->map(fn($r) => [
-                'year'           => $r->year,
-                'total'          => (float) $r->total,
+            ->map(fn ($r) => [
+                'year' => $r->year,
+                'total' => (float) $r->total,
                 'payments_count' => (int) $r->payments_count,
             ])
             ->toArray();
@@ -214,7 +214,7 @@ class DashboardService
             ->orderBy('month', 'desc')
             ->take(12)
             ->get()
-            ->map(fn($r) => [
+            ->map(fn ($r) => [
                 'month' => $r->month,
                 'total' => (float) $r->total,
             ])
@@ -242,26 +242,27 @@ class DashboardService
 
         return $query->get()->map(function ($service) {
             $daysLeft = (int) now()->startOfDay()->diffInDays($service->expiration_date, false);
+
             return [
-                'id'             => $service->id,
-                'name'           => $service->name,
-                'type'           => $service->type,
-                'provider'       => $service->provider,
-                'billing_cycle'  => $service->billing_cycle,
-                'client_name'    => $service->project->client->name ?? 'Sin Cliente',
-                'client_phone'   => $service->project->client->phone_number ?? null,
-                'expiration_date'=> $service->expiration_date->format('Y-m-d'),
-                'days_left'      => $daysLeft,
+                'id' => $service->id,
+                'name' => $service->name,
+                'type' => $service->type,
+                'provider' => $service->provider,
+                'billing_cycle' => $service->billing_cycle,
+                'client_name' => $service->project->client->name ?? 'Sin Cliente',
+                'client_phone' => $service->project->client->phone_number ?? null,
+                'expiration_date' => $service->expiration_date->format('Y-m-d'),
+                'days_left' => $daysLeft,
                 // NUEVO: semáforo de urgencia
-                'urgency'        => match(true) {
-                    $daysLeft <= 0  => 'expired',
-                    $daysLeft <= 7  => 'critical',
+                'urgency' => match (true) {
+                    $daysLeft <= 0 => 'expired',
+                    $daysLeft <= 7 => 'critical',
                     $daysLeft <= 15 => 'warning',
-                    default         => 'ok',
+                    default => 'ok',
                 },
-                'price_mxn'      => (float) $service->price_mxn,
-                'cost_mxn'       => (float) $service->cost_mxn,
-                'profit_margin'  => round((float) ($service->price_mxn - $service->cost_mxn), 2),
+                'price_mxn' => (float) $service->price_mxn,
+                'cost_mxn' => (float) $service->cost_mxn,
+                'profit_margin' => round((float) ($service->price_mxn - $service->cost_mxn), 2),
             ];
         })->toArray();
     }
@@ -275,25 +276,26 @@ class DashboardService
             ->where('status', ServiceStatusEnum::ACTIVE)
             ->get()
             ->map(function ($service) {
-                $margin     = $service->price_mxn - $service->cost_mxn;
-                $divisor    = match ($service->billing_cycle) {
-                    'monthly'    => 1,
-                    'quarterly'  => 3,
-                    'annually'   => 12,
+                $margin = $service->price_mxn - $service->cost_mxn;
+                $divisor = match ($service->billing_cycle) {
+                    'monthly' => 1,
+                    'quarterly' => 3,
+                    'annually' => 12,
                     'biennially' => 24,
-                    default      => 1,
+                    default => 1,
                 };
+
                 return [
-                    'id'           => $service->id,
-                    'name'         => $service->name,
-                    'client_name'  => $service->project->client->name ?? '—',
-                    'billing_cycle'=> $service->billing_cycle,
-                    'price_mxn'    => (float) $service->price_mxn,
-                    'cost_mxn'     => (float) $service->cost_mxn,
+                    'id' => $service->id,
+                    'name' => $service->name,
+                    'client_name' => $service->project->client->name ?? '—',
+                    'billing_cycle' => $service->billing_cycle,
+                    'price_mxn' => (float) $service->price_mxn,
+                    'cost_mxn' => (float) $service->cost_mxn,
                     'margin_total' => round((float) $margin, 2),
                     // MRR y margen mensualizado
-                    'mrr'          => round((float) $service->price_mxn / $divisor, 2),
-                    'margin_monthly'=> round((float) $margin / $divisor, 2),
+                    'mrr' => round((float) $service->price_mxn / $divisor, 2),
+                    'margin_monthly' => round((float) $margin / $divisor, 2),
                 ];
             })->toArray();
     }
@@ -308,15 +310,15 @@ class DashboardService
             ->orderBy('created_at', 'desc')
             ->take(5)
             ->get()
-            ->map(fn($p) => [
-                'id'      => $p->id,
-                'name'    => $p->name,
-                'type'    => $p->type->value ?? $p->type,
-                'status'  => $p->status->value ?? $p->status,
-                'amount'  => (float) $p->total_price,
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'type' => $p->type->value ?? $p->type,
+                'status' => $p->status->value ?? $p->status,
+                'amount' => (float) $p->total_price,
                 'balance' => (float) $p->balance,
                 // NUEVO: porcentaje cobrado
-                'paid_pct'=> $p->total_price > 0
+                'paid_pct' => $p->total_price > 0
                     ? round(($p->total_price - $p->balance) / $p->total_price * 100, 1)
                     : 100,
             ])->toArray();
@@ -335,15 +337,15 @@ class DashboardService
             ->orderBy('sent_at', 'desc')
             ->take(20)
             ->get()
-            ->map(fn($n) => [
-                'id'           => $n->id,
-                'type'         => $n->type,
-                'client_name'  => $n->client->name ?? '—',
+            ->map(fn ($n) => [
+                'id' => $n->id,
+                'type' => $n->type,
+                'client_name' => $n->client->name ?? '—',
                 'service_name' => $n->service->name ?? null,
                 'message_body' => $n->message_body,
-                'sent_at'      => Carbon::parse($n->sent_at)->format('Y-m-d H:i'),
+                'sent_at' => Carbon::parse($n->sent_at)->format('Y-m-d H:i'),
                 // NUEVO: tiempo relativo legible
-                'sent_ago'     => Carbon::parse($n->sent_at)->diffForHumans(),
+                'sent_ago' => Carbon::parse($n->sent_at)->diffForHumans(),
             ])->toArray();
     }
 
@@ -359,9 +361,9 @@ class DashboardService
 
         return [
             'whatsapp' => (int) ($counts['whatsapp_reminder'] ?? 0),
-            'email'    => (int) ($counts['email_invoice']     ?? 0),
-            'push'     => (int) ($counts['push_alert']        ?? 0),
-            'total'    => array_sum($counts),
+            'email' => (int) ($counts['email_invoice'] ?? 0),
+            'push' => (int) ($counts['push_alert'] ?? 0),
+            'total' => array_sum($counts),
         ];
     }
 
@@ -379,11 +381,11 @@ class DashboardService
         }], 'amount')
             ->orderByDesc('payments_sum_amount')
             ->get()
-            ->map(fn($c) => [
-                'id'           => $c->id,
-                'name'         => $c->name,
+            ->map(fn ($c) => [
+                'id' => $c->id,
+                'name' => $c->name,
                 'contact_name' => $c->contact_name,
-                'ltv'          => round((float) ($c->payments_sum_amount ?? 0), 2),
+                'ltv' => round((float) ($c->payments_sum_amount ?? 0), 2),
             ])->toArray();
     }
 }

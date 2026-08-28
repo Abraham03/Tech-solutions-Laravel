@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class NotificationLog extends Model
 {
-    use HasFactory; 
+    use HasFactory;
     // Recuerda que decidimos no usar SoftDeletes en los logs para mantener el historial intacto.
 
     protected $fillable = [

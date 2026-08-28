@@ -52,16 +52,16 @@ class StripeWebhookTest extends TestCase
     private function checkoutSessionEvent(array $metadata, array $overrides = []): array
     {
         return [
-            'id' => 'evt_test_' . uniqid(),
+            'id' => 'evt_test_'.uniqid(),
             'object' => 'event',
             'type' => 'checkout.session.completed',
             'data' => [
                 'object' => array_merge([
-                    'id' => 'cs_test_' . uniqid(),
+                    'id' => 'cs_test_'.uniqid(),
                     'object' => 'checkout.session',
                     'amount_total' => 56000,
                     'currency' => 'mxn',
-                    'payment_intent' => 'pi_test_' . uniqid(),
+                    'payment_intent' => 'pi_test_'.uniqid(),
                     'payment_status' => 'paid',
                     'status' => 'complete',
                     'metadata' => $metadata,

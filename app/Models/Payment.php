@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\PaymentMethodEnum;
+use App\Enums\PaymentStatusEnum;
+use App\Enums\PaymentTypeEnum;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -41,12 +44,13 @@ class Payment extends Model
     {
         return $this->belongsTo(Service::class);
     }
+
     protected function casts(): array
     {
         return [
-            'payment_method' => \App\Enums\PaymentMethodEnum::class,
-            'payment_type' => \App\Enums\PaymentTypeEnum::class,
-            'status' => \App\Enums\PaymentStatusEnum::class,
+            'payment_method' => PaymentMethodEnum::class,
+            'payment_type' => PaymentTypeEnum::class,
+            'status' => PaymentStatusEnum::class,
             'amount' => 'decimal:2',
             'paid_at' => 'datetime',
         ];

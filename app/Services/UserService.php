@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\User;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Hash;
 
 class UserService
 {
@@ -43,7 +43,7 @@ class UserService
             $data['password'] = Hash::make($data['password']);
         } else {
             // Si no se envía contraseña, eliminamos la llave para que no sobreescriba con null
-            unset($data['password']); 
+            unset($data['password']);
         }
 
         $user->update($data);

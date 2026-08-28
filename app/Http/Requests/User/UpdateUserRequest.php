@@ -2,10 +2,10 @@
 
 namespace App\Http\Requests\User;
 
+use App\Enums\RoleEnum;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Rules\Password;
-use App\Enums\RoleEnum;
 
 class UpdateUserRequest extends FormRequest
 {
@@ -19,7 +19,7 @@ class UpdateUserRequest extends FormRequest
         return [
             'name' => 'sometimes|string|max:150',
             // El correo debe ser único, ignorando el ID del usuario actual
-            'email' => 'sometimes|string|email|max:255|unique:users,email,' . $this->user->id,
+            'email' => 'sometimes|string|email|max:255|unique:users,email,'.$this->user->id,
             // La contraseña es opcional al actualizar
             'password' => ['nullable', 'string', Password::min(8)->mixedCase()->numbers()],
             'role' => ['sometimes', new Enum(RoleEnum::class)],

@@ -24,6 +24,7 @@ class ClientDashboardController extends Controller
     public function index(): JsonResponse
     {
         $summary = $this->clientPortalService->getDashboardSummary();
+
         return $this->successResponse($summary, 'Dashboard del cliente cargado con éxito.');
     }
 }

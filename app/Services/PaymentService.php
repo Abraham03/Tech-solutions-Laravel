@@ -2,14 +2,14 @@
 
 namespace App\Services;
 
-use App\Models\Payment;
-use App\Models\Project;
 use App\Enums\PaymentStatusEnum;
 use App\Enums\PaymentTypeEnum;
 use App\Enums\ProjectStatusEnum;
-use Illuminate\Validation\ValidationException;
-use Illuminate\Support\Facades\DB;
+use App\Models\Payment;
+use App\Models\Project;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class PaymentService
 {
@@ -28,7 +28,7 @@ class PaymentService
         // REGLA DE NEGOCIO: Validar saldos si el pago abona al proyecto y está completado.
         // Las renovaciones (dominio, hosting) son cobros recurrentes independientes del
         // precio del proyecto, así que no se validan ni suman contra su total.
-        $esAbonoAProyecto = !empty($data['project_id'])
+        $esAbonoAProyecto = ! empty($data['project_id'])
             && ($data['payment_type'] ?? '') !== PaymentTypeEnum::RENEWAL->value
             && ($data['status'] ?? '') === PaymentStatusEnum::COMPLETED->value;
 
@@ -47,7 +47,7 @@ class PaymentService
             // Bloqueamos si el abono supera lo que debe
             if ($newTotal > $project->total_price) {
                 throw ValidationException::withMessages([
-                    'amount' => "El abono excede el costo del proyecto. Saldo pendiente: $" . number_format($saldoPendiente, 2)
+                    'amount' => 'El abono excede el costo del proyecto. Saldo pendiente: $'.number_format($saldoPendiente, 2),
                 ]);
             }
 
@@ -72,6 +72,7 @@ class PaymentService
         // En un sistema estricto, no deberíamos dejar editar pagos completados.
         // Pero para flexibilidad, lo actualizamos.
         $payment->update($data);
+
         return $payment;
     }
 

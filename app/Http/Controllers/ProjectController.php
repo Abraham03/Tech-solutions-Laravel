@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Project;
 use App\Http\Requests\Project\StoreProjectRequest;
 use App\Http\Requests\Project\UpdateProjectRequest;
 use App\Http\Resources\ProjectResource;
+use App\Models\Project;
 use App\Services\ProjectService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +24,7 @@ class ProjectController extends Controller
     public function index(): JsonResponse
     {
         $projects = $this->projectService->getAllPaginated();
-        
+
         return $this->successResponse(
             ProjectResource::collection($projects)->response()->getData(true),
             'Lista de proyectos obtenida.'

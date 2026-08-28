@@ -2,15 +2,18 @@
 
 namespace App\Http\Requests\Payment;
 
+use App\Enums\PaymentMethodEnum;
+use App\Enums\PaymentStatusEnum;
+use App\Enums\PaymentTypeEnum;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
-use App\Enums\PaymentMethodEnum;
-use App\Enums\PaymentTypeEnum;
-use App\Enums\PaymentStatusEnum;
 
 class StorePaymentRequest extends FormRequest
 {
-    public function authorize(): bool { return true; }
+    public function authorize(): bool
+    {
+        return true;
+    }
 
     public function rules(): array
     {

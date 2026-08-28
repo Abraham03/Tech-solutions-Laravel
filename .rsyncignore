@@ -1,0 +1,36 @@
+# Rutas que rsync NO debe enviar ni borrar en el servidor.
+#
+# Importante: el deploy corre con --delete, asi que todo lo que viva en el
+# servidor y no este ni en el repositorio ni en esta lista, se borra. Las
+# entradas de abajo existen solo en produccion y perderlas rompe la app.
+
+# --- Solo existen en el servidor: NO TOCAR ---
+.env
+firebase_credentials.json
+# storage/ guarda las llaves de OAuth (oauth-private.key, oauth-public.key),
+# los logs y las sesiones. Nada de eso esta versionado.
+storage/
+# Generados por artisan en el servidor; package:discover los rehace.
+bootstrap/cache/
+# Assets compilados por Vite y el symlink de storage: ambos en .gitignore.
+public/build
+public/storage
+
+# --- No tienen nada que hacer en produccion ---
+.git
+.gitignore
+.gitattributes
+.github
+.gitlab-ci.yml
+.rsyncignore
+.editorconfig
+.npmrc
+node_modules
+tests
+phpunit.xml
+compose.yaml
+README.md
+package.json
+package-lock.json
+vite.config.js
+.env.example

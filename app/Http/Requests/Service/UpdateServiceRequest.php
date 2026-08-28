@@ -2,14 +2,17 @@
 
 namespace App\Http\Requests\Service;
 
+use App\Enums\ServiceStatusEnum;
+use App\Enums\ServiceTypeEnum;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Enum;
-use App\Enums\ServiceTypeEnum;
-use App\Enums\ServiceStatusEnum;
 
 class UpdateServiceRequest extends FormRequest
 {
-    public function authorize(): bool { return true; }
+    public function authorize(): bool
+    {
+        return true;
+    }
 
     public function rules(): array
     {

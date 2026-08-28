@@ -6,18 +6,19 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateUserRequest; // <-- Nueva importación
 use App\Http\Resources\UserResource;
+use App\Models\User;
 use App\Services\AuthService;
 use App\Services\UserService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use App\Models\User;
 
 class UserController extends Controller
 {
     use ApiResponseTrait;
 
     protected $authService;
+
     protected $userService;
 
     public function __construct(AuthService $authService, UserService $userService)
@@ -32,7 +33,7 @@ class UserController extends Controller
     {
         $result = $this->authService->login($request->validated());
 
-        if (!$result) {
+        if (! $result) {
             return $this->errorResponse('Credenciales incorrectas.', 401);
         }
 
@@ -70,7 +71,7 @@ class UserController extends Controller
         return $this->successResponse(
             new UserResource($user),
             'Usuario creado exitosamente.',
-            201 
+            201
         );
     }
 
@@ -96,7 +97,7 @@ class UserController extends Controller
     {
         // Medida de seguridad extra: Evitar que el admin se borre a sí mismo usando el Request inyectado
         if ($request->user()->id === $user->id) {
-             return $this->errorResponse('No puedes eliminar tu propia cuenta.', 403);
+            return $this->errorResponse('No puedes eliminar tu propia cuenta.', 403);
         }
 
         $this->userService->deleteUser($user);

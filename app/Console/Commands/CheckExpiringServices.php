@@ -2,14 +2,14 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use App\Services\InfrastructureService;
-use App\Services\StripeService;
-use App\Notifications\ServiceExpiringNotification;
 use App\Models\NotificationLog;
 use App\Models\Service;
-use Illuminate\Support\Facades\Log;
+use App\Notifications\ServiceExpiringNotification;
+use App\Services\InfrastructureService;
+use App\Services\StripeService;
 use Carbon\Carbon;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 class CheckExpiringServices extends Command
 {
@@ -20,9 +20,11 @@ class CheckExpiringServices extends Command
     private const REMINDER_COOLDOWN_DAYS = 7;
 
     protected $signature = 'services:check-expiring';
+
     protected $description = 'Verifica servicios por vencer y envía recordatorio de WhatsApp con link de Stripe';
 
     protected $infrastructureService;
+
     protected $stripeService;
 
     // Inyectamos ambos servicios siguiendo SOLID
@@ -48,29 +50,33 @@ class CheckExpiringServices extends Command
 
         if ($expiringServices->isEmpty()) {
             $this->info('Todo en orden. No hay servicios por vencer pronto.');
+
             return Command::SUCCESS;
         }
 
         foreach ($expiringServices as $service) {
             $client = $service->project->client;
 
-            if (!$client) continue;
+            if (! $client) {
+                continue;
+            }
 
             // Si ya le avisamos hace poco, no volvemos a molestarlo ni generamos otro cobro.
             if ($this->wasRecentlyNotified($service)) {
-                $this->line("Omitido {$service->name}: ya se notificó en los últimos " . self::REMINDER_COOLDOWN_DAYS . " días.");
+                $this->line("Omitido {$service->name}: ya se notificó en los últimos ".self::REMINDER_COOLDOWN_DAYS.' días.');
+
                 continue;
             }
 
             try {
                 // 1. Generamos el link de pago automáticamente para este servicio específico
                 $session = $this->stripeService->createCheckoutSession([
-                    'client_id'    => $client->id,
-                    'project_id'   => $service->project_id,
-                    'service_id'   => $service->id,
-                    'amount'       => $service->price_mxn,
-                    'description'  => "Renovación: {$service->name} ({$service->type->value})",
-                    'payment_type' => 'renewal' // Asegúrate de tener este tipo en tu lógica de pagos
+                    'client_id' => $client->id,
+                    'project_id' => $service->project_id,
+                    'service_id' => $service->id,
+                    'amount' => $service->price_mxn,
+                    'description' => "Renovación: {$service->name} ({$service->type->value})",
+                    'payment_type' => 'renewal', // Asegúrate de tener este tipo en tu lógica de pagos
                 ]);
 
                 // 2. Disparamos la notificación pasando el servicio y el link generado
@@ -82,18 +88,19 @@ class CheckExpiringServices extends Command
                     'service_id' => $service->id,
                     'type' => 'whatsapp_reminder',
                     'message_body' => "Aviso de vencimiento enviado para: {$service->name} ({$service->expiration_date->format('d-m-Y')}). Link de pago adjunto.",
-                    'sent_at' => now()
+                    'sent_at' => now(),
                 ]);
 
                 $this->info("Notificación enviada a {$client->name} para el servicio {$service->name}");
 
             } catch (\Exception $e) {
-                Log::error("Error procesando vencimiento para servicio {$service->id}: " . $e->getMessage());
+                Log::error("Error procesando vencimiento para servicio {$service->id}: ".$e->getMessage());
                 $this->error("No se pudo procesar el servicio {$service->name}");
             }
         }
 
         $this->info('Escaneo y notificaciones completadas.');
+
         return Command::SUCCESS;
     }
 

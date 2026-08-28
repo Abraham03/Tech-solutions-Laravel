@@ -9,7 +9,7 @@ use Illuminate\Notifications\Notifiable;
 
 class Client extends Model
 {
-    use HasFactory, SoftDeletes, Notifiable;
+    use HasFactory, Notifiable, SoftDeletes;
 
     protected $fillable = [
         'user_id',

@@ -19,7 +19,7 @@ class ClientFactory extends Factory
             'name' => fake()->company(),
             'contact_name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
-            'phone_number' => '52' . fake()->numerify('##########'),
+            'phone_number' => '52'.fake()->numerify('##########'),
             'stripe_customer_id' => null,
         ];
     }

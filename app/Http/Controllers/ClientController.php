@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Client;
 use App\Http\Requests\Client\StoreClientRequest;
 use App\Http\Requests\Client\UpdateClientRequest;
 use App\Http\Resources\ClientResource;
+use App\Models\Client;
 use App\Services\ClientService;
 use App\Traits\ApiResponseTrait;
 use Illuminate\Http\JsonResponse;
@@ -25,7 +25,7 @@ class ClientController extends Controller
     public function index(): JsonResponse
     {
         $clients = $this->clientService->getAllPaginated();
-        
+
         // Devolvemos la colección transformada por nuestro Resource
         return $this->successResponse(
             ClientResource::collection($clients)->response()->getData(true),

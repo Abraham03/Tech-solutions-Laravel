@@ -2,9 +2,9 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Channels\FirebaseChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
-use App\Notifications\Channels\FirebaseChannel;
 
 class PaymentReceivedNotification extends Notification
 {
@@ -26,11 +26,11 @@ class PaymentReceivedNotification extends Notification
     {
         return [
             'title' => '¡Pago Recibido! 💰',
-            'body' => "Se ha registrado un abono de $" . number_format($this->payment->amount, 2) . " MXN.",
+            'body' => 'Se ha registrado un abono de $'.number_format($this->payment->amount, 2).' MXN.',
             'extra_data' => [
                 'payment_id' => (string) $this->payment->id,
                 'click_action' => 'OPEN_PAYMENTS_SCREEN', // Para la app en Flutter
-            ]
+            ],
         ];
     }
 }
