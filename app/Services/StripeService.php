@@ -19,6 +19,15 @@ class StripeService
      */
     public function createCheckoutSession(array $data): Session
     {
+        // Stripe cobra en centavos y exige un entero. Redondeamos explicitamente porque
+        // multiplicar un decimal por 100 en punto flotante puede truncar hacia abajo
+        // (560.10 * 100 da 56009.999... y PHP lo castea a 56009).
+        $unitAmount = (int) round(((float) $data['amount']) * 100);
+
+        if ($unitAmount <= 0) {
+            throw new \InvalidArgumentException('El monto del cobro debe ser mayor a cero.');
+        }
+
         return $this->stripe->checkout->sessions->create([
             'payment_method_types' => ['card'],
             'line_items' => [[
@@ -27,7 +36,7 @@ class StripeService
                     'product_data' => [
                         'name' => $data['description'],
                     ],
-                    'unit_amount' => $data['amount'] * 100, // Stripe usa centavos
+                    'unit_amount' => $unitAmount,
                 ],
                 'quantity' => 1,
             ]],

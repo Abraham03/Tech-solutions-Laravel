@@ -7,11 +7,18 @@ use App\Services\InfrastructureService;
 use App\Services\StripeService;
 use App\Notifications\ServiceExpiringNotification;
 use App\Models\NotificationLog;
+use App\Models\Service;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class CheckExpiringServices extends Command
 {
+    /**
+     * Días mínimos entre dos recordatorios del mismo servicio.
+     * Evita quemar la cuota de plantillas de Meta y generar links de pago duplicados.
+     */
+    private const REMINDER_COOLDOWN_DAYS = 7;
+
     protected $signature = 'services:check-expiring';
     protected $description = 'Verifica servicios por vencer y envía recordatorio de WhatsApp con link de Stripe';
 
@@ -30,6 +37,12 @@ class CheckExpiringServices extends Command
     {
         $this->info('Iniciando escaneo de infraestructura de Tech Solutions...');
 
+        // Damos de baja lo que lleva demasiado tiempo vencido para dejar de insistirle al cliente.
+        $expired = $this->infrastructureService->expireOverdueServices();
+        if ($expired > 0) {
+            $this->warn("{$expired} servicio(s) marcados como vencidos por falta de pago.");
+        }
+
         // Buscamos servicios que venzan en los próximos 7 días
         $expiringServices = $this->infrastructureService->getExpiringServices(7);
 
@@ -42,6 +55,12 @@ class CheckExpiringServices extends Command
             $client = $service->project->client;
 
             if (!$client) continue;
+
+            // Si ya le avisamos hace poco, no volvemos a molestarlo ni generamos otro cobro.
+            if ($this->wasRecentlyNotified($service)) {
+                $this->line("Omitido {$service->name}: ya se notificó en los últimos " . self::REMINDER_COOLDOWN_DAYS . " días.");
+                continue;
+            }
 
             try {
                 // 1. Generamos el link de pago automáticamente para este servicio específico
@@ -57,13 +76,12 @@ class CheckExpiringServices extends Command
                 // 2. Disparamos la notificación pasando el servicio y el link generado
                 $client->notify(new ServiceExpiringNotification($service, $session->url));
 
-                // ======= 3. NUEVO: GUARDAR EN LA BASE DE DATOS =======
+                // 3. Dejamos rastro: además del historial, es lo que alimenta el filtro de arriba.
                 NotificationLog::create([
                     'client_id' => $client->id,
                     'service_id' => $service->id,
                     'type' => 'whatsapp_reminder',
                     'message_body' => "Aviso de vencimiento enviado para: {$service->name} ({$service->expiration_date->format('d-m-Y')}). Link de pago adjunto.",
-                    'status' => 'sent', // Asumimos sent si no tiró error
                     'sent_at' => now()
                 ]);
 
@@ -77,5 +95,16 @@ class CheckExpiringServices extends Command
 
         $this->info('Escaneo y notificaciones completadas.');
         return Command::SUCCESS;
+    }
+
+    /**
+     * ¿Ya se le mandó recordatorio de este servicio dentro del periodo de enfriamiento?
+     */
+    private function wasRecentlyNotified(Service $service): bool
+    {
+        return NotificationLog::where('service_id', $service->id)
+            ->where('type', 'whatsapp_reminder')
+            ->where('sent_at', '>=', Carbon::now()->subDays(self::REMINDER_COOLDOWN_DAYS))
+            ->exists();
     }
 }

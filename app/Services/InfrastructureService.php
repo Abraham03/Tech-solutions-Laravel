@@ -46,6 +46,21 @@ class InfrastructureService
     }
 
     /**
+     * Marca como vencidos los servicios que llevan demasiado tiempo sin renovarse.
+     * Al salir de 'active' dejan de entrar al escaneo de recordatorios.
+     *
+     * @return int Cuántos servicios se dieron de baja.
+     */
+    public function expireOverdueServices(int $graceDays = 30): int
+    {
+        $cutoff = Carbon::now()->subDays($graceDays)->toDateString();
+
+        return Service::where('status', \App\Enums\ServiceStatusEnum::ACTIVE->value)
+            ->whereDate('expiration_date', '<', $cutoff)
+            ->update(['status' => \App\Enums\ServiceStatusEnum::EXPIRED->value]);
+    }
+
+    /**
      * Extiende la vigencia de un servicio un ciclo de facturación completo.
      * Se usa cuando se confirma el pago de una renovación.
      */

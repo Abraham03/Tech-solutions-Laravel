@@ -18,8 +18,8 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          # Importante: Ajusta esta ruta a donde quieres que caigan los archivos
-          server-dir: ./api/public/
+          # Raiz de la app Laravel en el servidor (donde vive artisan), NO la carpeta public/
+          server-dir: ./api/
           exclude: |
             **/.git*
             **/.git*/**

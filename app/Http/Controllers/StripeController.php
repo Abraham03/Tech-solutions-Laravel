@@ -7,6 +7,7 @@ use App\Services\StripeService;
 use App\Services\PaymentService;
 use App\Services\InfrastructureService;
 use App\Traits\ApiResponseTrait;
+use App\Enums\PaymentStatusEnum;
 use App\Enums\PaymentTypeEnum;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Log;
@@ -63,12 +64,17 @@ class StripeController extends Controller
 
         Log::info("Webhook Stripe recibido: {$event->type} ({$event->id})");
 
-        // Si el pago fue exitoso en Stripe
-        if ($event->type === 'checkout.session.completed') {
-            return $this->processCompletedSession($event);
-        }
+        return match ($event->type) {
+            // Pago liquidado. El asincrono llega despues por un metodo diferido;
+            // la idempotencia por payment_intent evita que se registre dos veces.
+            'checkout.session.completed',
+            'checkout.session.async_payment_succeeded' => $this->processCompletedSession($event),
 
-        return response()->json(['status' => 'success']);
+            'charge.refunded'               => $this->processRefund($event),
+            'payment_intent.payment_failed' => $this->processFailedPayment($event),
+
+            default => response()->json(['status' => 'success']),
+        };
     }
 
     /**
@@ -170,5 +176,52 @@ class StripeController extends Controller
         }
 
         return response()->json(['status' => 'success']);
+    }
+
+    /**
+     * Refleja un reembolso emitido desde Stripe.
+     *
+     * Solo cambiamos el estado en reembolsos totales: uno parcial dejaria el monto
+     * original en la fila y descuadraria los totales del dashboard.
+     */
+    private function processRefund($event)
+    {
+        $charge = $event->data->object;
+
+        $payment = Payment::where('stripe_payment_intent_id', $charge->payment_intent)->first();
+
+        if (!$payment) {
+            Log::warning("Webhook {$event->id}: reembolso de un cobro que no esta en la BD ({$charge->payment_intent}).");
+            return response()->json(['status' => 'payment_not_found']);
+        }
+
+        if (!$charge->refunded) {
+            $refunded = $charge->amount_refunded / 100;
+            Log::warning("Webhook {$event->id}: reembolso PARCIAL de \${$refunded} sobre el pago {$payment->id}. Requiere ajuste manual.");
+            return response()->json(['status' => 'partial_refund']);
+        }
+
+        $payment->update(['status' => PaymentStatusEnum::REFUNDED->value]);
+        Log::info("Webhook {$event->id}: pago {$payment->id} marcado como reembolsado.");
+
+        // Nota: no revertimos la vigencia que renewService() haya extendido; se ajusta a mano.
+        return response()->json(['status' => 'refunded']);
+    }
+
+    /**
+     * Un intento de cobro fallido no genera fila: solo queda registrado para seguimiento.
+     */
+    private function processFailedPayment($event)
+    {
+        $intent = $event->data->object;
+
+        $metadata = $intent->metadata ?? [];
+        $clientId = $metadata['client_id'] ?? 'desconocido';
+        $serviceId = $metadata['service_id'] ?? 'n/a';
+        $reason = $intent->last_payment_error->message ?? 'sin detalle';
+
+        Log::warning("Webhook {$event->id}: pago fallido del cliente {$clientId} (servicio {$serviceId}). Motivo: {$reason}");
+
+        return response()->json(['status' => 'payment_failed']);
     }
 }
