@@ -114,7 +114,11 @@ build:vendor:
     # dependencias: el runner solo descarga. Por eso es seguro ignorar los
     # requisitos de plataforma (aqui no se ejecuta la app).
     - composer install --no-dev --prefer-dist --no-interaction --no-progress --no-scripts --ignore-platform-reqs
-    - composer dump-autoload --no-dev --optimize --ignore-platform-reqs
+    # --no-scripts tambien aqui: dump-autoload dispara post-autoload-dump, que
+    # ejecuta `artisan package:discover`. La imagen composer:2 no tiene la app
+    # configurada y no tiene por que arrancarla; el deploy corre package:discover
+    # en el servidor, que es donde si hay .env.
+    - composer dump-autoload --no-dev --optimize --no-scripts --ignore-platform-reqs
   artifacts:
     expire_in: 1 hour
     paths:

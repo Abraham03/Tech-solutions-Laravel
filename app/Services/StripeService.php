@@ -7,11 +7,31 @@ use Stripe\StripeClient;
 
 class StripeService
 {
-    protected $stripe;
+    protected ?StripeClient $stripe = null;
 
-    public function __construct()
+    /**
+     * El cliente se construye al usarse, no al inyectarse.
+     *
+     * Artisan instancia todos los comandos registrados para leer sus firmas, y
+     * CheckExpiringServices recibe este servicio por constructor. Construir aqui
+     * el StripeClient hacia que CUALQUIER comando de artisan reventara con
+     * "$config must be a string or an array" cuando faltara STRIPE_SECRET:
+     * incluido el `package:discover` que Composer dispara en post-autoload-dump,
+     * que es donde no existe .env todavia.
+     */
+    protected function client(): StripeClient
     {
-        $this->stripe = new StripeClient(config('services.stripe.secret'));
+        if ($this->stripe === null) {
+            $secret = config('services.stripe.secret');
+
+            if (blank($secret)) {
+                throw new \RuntimeException('Falta STRIPE_SECRET: no se puede hablar con Stripe.');
+            }
+
+            $this->stripe = new StripeClient($secret);
+        }
+
+        return $this->stripe;
     }
 
     /**
@@ -28,7 +48,7 @@ class StripeService
             throw new \InvalidArgumentException('El monto del cobro debe ser mayor a cero.');
         }
 
-        return $this->stripe->checkout->sessions->create([
+        return $this->client()->checkout->sessions->create([
             'payment_method_types' => ['card'],
             'line_items' => [[
                 'price_data' => [
