@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\User;
 use App\Services\FirebaseService;
 use Illuminate\Console\Command;
+use Kreait\Firebase\Exception\Messaging\NotFound;
 
 class SendTestPush extends Command
 {
@@ -42,13 +43,25 @@ class SendTestPush extends Command
 
         $this->info("Enviando prueba a {$user->name} <{$user->email}>...");
 
-        $result = $firebase->sendPushNotification(
-            $user->fcm_token,
-            'Prueba de notificaciones',
-            'Si ves esto, la cadena de Firebase funciona de extremo a extremo.',
-            ['tipo' => 'prueba'],
-            config('services.firebase.payments_url'),
-        );
+        try {
+            $result = $firebase->sendPushNotification(
+                $user->fcm_token,
+                'Prueba de notificaciones',
+                'Si ves esto, la cadena de Firebase funciona de extremo a extremo.',
+                ['tipo' => 'prueba'],
+                config('services.firebase.payments_url'),
+            );
+        } catch (NotFound $e) {
+            // El token murio (se reemplazo el service worker, se limpiaron los
+            // datos del sitio, se desinstalo la PWA...). Se borra para que el
+            // sistema deje de intentarlo.
+            $user->forceFill(['fcm_token' => null])->save();
+
+            $this->error('El token de este usuario ya no esta registrado en Firebase; se elimino de la base.');
+            $this->line('Vuelve a iniciar sesion en el panel para registrar uno nuevo.');
+
+            return self::FAILURE;
+        }
 
         if ($result === false) {
             $this->error('Firebase rechazo el envio. El motivo exacto esta en storage/logs/laravel.log.');

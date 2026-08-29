@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Messaging;
+use Kreait\Firebase\Exception\Messaging\NotFound;
 use Kreait\Firebase\Factory;
 use Kreait\Firebase\Messaging\CloudMessage;
 
@@ -63,6 +64,17 @@ class FirebaseService
             }
 
             return $this->messaging()->send(CloudMessage::fromArray($payload));
+        } catch (NotFound $e) {
+            // "Device unregistered": el token ya no sirve. Pasa cuando se
+            // desinstala la app, se limpian los datos del sitio o se reemplaza
+            // el service worker, que invalida la suscripcion push anterior.
+            //
+            // Se propaga en vez de tragarselo: quien llama debe borrar ese
+            // token, o seguiriamos notificando a un dispositivo inexistente en
+            // cada pago, indefinidamente y sin que nadie se entere.
+            Log::warning('Token de Firebase ya no registrado: '.$e->getMessage());
+
+            throw $e;
         } catch (\Exception $e) {
             Log::error('Error enviando notificación Firebase: '.$e->getMessage());
 
