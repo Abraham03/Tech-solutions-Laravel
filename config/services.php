@@ -41,6 +41,14 @@ return [
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
+    'firebase' => [
+        // Ruta del JSON de credenciales, relativa a la raiz del proyecto.
+        'credentials' => env('FIREBASE_CREDENTIALS', 'firebase_credentials.json'),
+        // A donde lleva el clic en una notificacion web (la PWA de Angular).
+        // Si queda vacia, la notificacion se envia sin enlace.
+        'payments_url' => env('FIREBASE_PAYMENTS_URL'),
+    ],
+
     'meta' => [
         'whatsapp' => [
             'token' => env('META_WHATSAPP_TOKEN'),

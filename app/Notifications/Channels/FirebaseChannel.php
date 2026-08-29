@@ -32,7 +32,8 @@ class FirebaseChannel
             $deviceToken,
             $data['title'],
             $data['body'],
-            $data['extra_data'] ?? []
+            $data['extra_data'] ?? [],
+            $data['link'] ?? null
         );
     }
 }

@@ -27,9 +27,12 @@ class PaymentReceivedNotification extends Notification
         return [
             'title' => '¡Pago Recibido! 💰',
             'body' => 'Se ha registrado un abono de $'.number_format($this->payment->amount, 2).' MXN.',
+            // Destino del clic en navegadores (PWA de Angular). Los clientes
+            // nativos ignoran esto y usan el click_action de extra_data.
+            'link' => config('services.firebase.payments_url'),
             'extra_data' => [
                 'payment_id' => (string) $this->payment->id,
-                'click_action' => 'OPEN_PAYMENTS_SCREEN', // Para la app en Flutter
+                'click_action' => 'OPEN_PAYMENTS_SCREEN', // Para la app nativa
             ],
         ];
     }

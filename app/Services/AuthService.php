@@ -39,6 +39,11 @@ class AuthService
      */
     public function logout(User $user): void
     {
+        // El token de FCM identifica al dispositivo, no a la sesion: conservarlo
+        // haria que los avisos de pagos siguieran llegando a un aparato donde
+        // alguien ya cerro sesion.
+        $user->forceFill(['fcm_token' => null])->save();
+
         // En Passport, el token actual se puede acceder y revocar así
         $user->token()->revoke();
     }

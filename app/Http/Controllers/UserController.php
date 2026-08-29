@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\User\StoreUserRequest;
+use App\Http\Requests\User\UpdateFcmTokenRequest;
 use App\Http\Requests\User\UpdateUserRequest; // <-- Nueva importación
 use App\Http\Resources\UserResource;
 use App\Models\User;
@@ -50,6 +51,21 @@ class UserController extends Controller
     public function me(Request $request): JsonResponse
     {
         return $this->successResponse($request->user(), 'Perfil recuperado.');
+    }
+
+    /**
+     * Registra el token de Firebase del dispositivo que esta usando la sesion.
+     *
+     * La app (PWA de Angular o cliente nativo) debe llamarla al iniciar sesion y
+     * cada vez que FCM rote el token, que ocurre sin aviso.
+     */
+    public function updateFcmToken(UpdateFcmTokenRequest $request): JsonResponse
+    {
+        $request->user()->forceFill([
+            'fcm_token' => $request->validated()['fcm_token'],
+        ])->save();
+
+        return $this->successResponse(null, 'Token de notificaciones registrado.');
     }
 
     // --- MÉTODOS CRUD DE USUARIOS (Nuevos) ---
