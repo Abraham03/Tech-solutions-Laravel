@@ -11,6 +11,7 @@ use App\Models\Payment;
 use App\Models\Project;
 use App\Models\Service;
 use Carbon\Carbon;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
 class DashboardService
@@ -187,7 +188,7 @@ class DashboardService
             ->select(
                 DB::raw('SUM(amount) as total'),
                 DB::raw('COUNT(*) as payments_count'),
-                DB::raw('YEAR(paid_at) as year')
+                DB::raw($this->sqlYear('paid_at').' as year')
             )
             ->groupBy('year')
             ->orderBy('year', 'desc')
@@ -208,7 +209,7 @@ class DashboardService
         return Payment::where('status', PaymentStatusEnum::COMPLETED)
             ->select(
                 DB::raw('SUM(amount) as total'),
-                DB::raw("DATE_FORMAT(paid_at, '%Y-%m') as month")
+                DB::raw($this->sqlYearMonth('paid_at').' as month')
             )
             ->groupBy('month')
             ->orderBy('month', 'desc')
@@ -240,31 +241,7 @@ class DashboardService
             return $query->count();
         }
 
-        return $query->get()->map(function ($service) {
-            $daysLeft = (int) now()->startOfDay()->diffInDays($service->expiration_date, false);
-
-            return [
-                'id' => $service->id,
-                'name' => $service->name,
-                'type' => $service->type,
-                'provider' => $service->provider,
-                'billing_cycle' => $service->billing_cycle,
-                'client_name' => $service->project->client->name ?? 'Sin Cliente',
-                'client_phone' => $service->project->client->phone_number ?? null,
-                'expiration_date' => $service->expiration_date->format('Y-m-d'),
-                'days_left' => $daysLeft,
-                // NUEVO: semáforo de urgencia
-                'urgency' => match (true) {
-                    $daysLeft <= 0 => 'expired',
-                    $daysLeft <= 7 => 'critical',
-                    $daysLeft <= 15 => 'warning',
-                    default => 'ok',
-                },
-                'price_mxn' => (float) $service->price_mxn,
-                'cost_mxn' => (float) $service->cost_mxn,
-                'profit_margin' => round((float) ($service->price_mxn - $service->cost_mxn), 2),
-            ];
-        })->toArray();
+        return $query->get()->map($this->mapExpiringService())->toArray();
     }
 
     /**
@@ -272,32 +249,7 @@ class DashboardService
      */
     private function getServiceMargins(): array
     {
-        return Service::with('project.client')
-            ->where('status', ServiceStatusEnum::ACTIVE)
-            ->get()
-            ->map(function ($service) {
-                $margin = $service->price_mxn - $service->cost_mxn;
-                $divisor = match ($service->billing_cycle) {
-                    'monthly' => 1,
-                    'quarterly' => 3,
-                    'annually' => 12,
-                    'biennially' => 24,
-                    default => 1,
-                };
-
-                return [
-                    'id' => $service->id,
-                    'name' => $service->name,
-                    'client_name' => $service->project->client->name ?? '—',
-                    'billing_cycle' => $service->billing_cycle,
-                    'price_mxn' => (float) $service->price_mxn,
-                    'cost_mxn' => (float) $service->cost_mxn,
-                    'margin_total' => round((float) $margin, 2),
-                    // MRR y margen mensualizado
-                    'mrr' => round((float) $service->price_mxn / $divisor, 2),
-                    'margin_monthly' => round((float) $margin / $divisor, 2),
-                ];
-            })->toArray();
+        return $this->serviceMarginsQuery()->get()->map($this->mapServiceMargin())->toArray();
     }
 
     // ==========================================
@@ -306,22 +258,7 @@ class DashboardService
 
     private function getRecentProjects(): array
     {
-        return Project::with('client')
-            ->orderBy('created_at', 'desc')
-            ->take(5)
-            ->get()
-            ->map(fn ($p) => [
-                'id' => $p->id,
-                'name' => $p->name,
-                'type' => $p->type->value ?? $p->type,
-                'status' => $p->status->value ?? $p->status,
-                'amount' => (float) $p->total_price,
-                'balance' => (float) $p->balance,
-                // NUEVO: porcentaje cobrado
-                'paid_pct' => $p->total_price > 0
-                    ? round(($p->total_price - $p->balance) / $p->total_price * 100, 1)
-                    : 100,
-            ])->toArray();
+        return $this->recentProjectsQuery()->take(5)->get()->map($this->mapProject())->toArray();
     }
 
     // ==========================================
@@ -333,20 +270,7 @@ class DashboardService
      */
     private function getRecentNotifications(): array
     {
-        return NotificationLog::with(['client', 'service'])
-            ->orderBy('sent_at', 'desc')
-            ->take(20)
-            ->get()
-            ->map(fn ($n) => [
-                'id' => $n->id,
-                'type' => $n->type,
-                'client_name' => $n->client->name ?? '—',
-                'service_name' => $n->service->name ?? null,
-                'message_body' => $n->message_body,
-                'sent_at' => Carbon::parse($n->sent_at)->format('Y-m-d H:i'),
-                // NUEVO: tiempo relativo legible
-                'sent_ago' => Carbon::parse($n->sent_at)->diffForHumans(),
-            ])->toArray();
+        return $this->recentNotificationsQuery()->take(20)->get()->map($this->mapNotification())->toArray();
     }
 
     /**
@@ -376,16 +300,196 @@ class DashboardService
      */
     private function getClientLTV(): array
     {
+        return $this->clientLtvQuery()->get()->map($this->mapClientLtv())->toArray();
+    }
+
+    // ==========================================
+    // LISTADOS PAGINADOS DE LAS PESTANAS
+    //
+    // El resumen (getAdminSummary) sigue devolviendo recortes cortos para el
+    // primer pintado. Estos metodos sirven a cada pestana su propia pagina, para
+    // que el dashboard deje de cargarlo todo de golpe cuando las listas crezcan.
+    //
+    // Cada lista comparte consulta y mapeo con su version del resumen, asi no
+    // hay dos formas distintas de la misma fila segun por donde se pida.
+    // ==========================================
+
+    public function paginatedRecentProjects(int $perPage = 15): LengthAwarePaginator
+    {
+        return $this->recentProjectsQuery()->paginate($perPage)->withQueryString()->through($this->mapProject());
+    }
+
+    public function paginatedExpiringServices(int $perPage = 15, int $days = 30): LengthAwarePaginator
+    {
+        return $this->expiringServicesQuery($days)->paginate($perPage)->withQueryString()->through($this->mapExpiringService());
+    }
+
+    public function paginatedServiceMargins(int $perPage = 15): LengthAwarePaginator
+    {
+        return $this->serviceMarginsQuery()->paginate($perPage)->withQueryString()->through($this->mapServiceMargin());
+    }
+
+    public function paginatedNotifications(int $perPage = 15, ?string $type = null): LengthAwarePaginator
+    {
+        return $this->recentNotificationsQuery()
+            // El filtro por canal se resuelve en la base y no en el navegador:
+            // filtrar en el cliente solo miraria la pagina cargada.
+            ->when($type, fn ($q) => $q->where('type', $type))
+            ->paginate($perPage)
+            ->withQueryString()
+            ->through($this->mapNotification());
+    }
+
+    public function paginatedClientLtv(int $perPage = 15): LengthAwarePaginator
+    {
+        return $this->clientLtvQuery()->paginate($perPage)->withQueryString()->through($this->mapClientLtv());
+    }
+
+    // ---------------------------------------------------------------- consultas
+
+    private function recentProjectsQuery()
+    {
+        return Project::with('client')->orderBy('created_at', 'desc');
+    }
+
+    private function expiringServicesQuery(int $days = 30)
+    {
+        return Service::with('project.client')
+            ->where('status', ServiceStatusEnum::ACTIVE)
+            ->whereNotNull('expiration_date')
+            ->whereBetween('expiration_date', [now()->startOfDay(), now()->addDays($days)->endOfDay()])
+            ->orderBy('expiration_date', 'asc');
+    }
+
+    private function serviceMarginsQuery()
+    {
+        return Service::with('project.client')->where('status', ServiceStatusEnum::ACTIVE);
+    }
+
+    private function recentNotificationsQuery()
+    {
+        return NotificationLog::with(['client', 'service'])->orderBy('sent_at', 'desc');
+    }
+
+    private function clientLtvQuery()
+    {
         return Client::withSum(['payments' => function ($q) {
             $q->where('status', PaymentStatusEnum::COMPLETED);
-        }], 'amount')
-            ->orderByDesc('payments_sum_amount')
-            ->get()
-            ->map(fn ($c) => [
-                'id' => $c->id,
-                'name' => $c->name,
-                'contact_name' => $c->contact_name,
-                'ltv' => round((float) ($c->payments_sum_amount ?? 0), 2),
-            ])->toArray();
+        }], 'amount')->orderByDesc('payments_sum_amount');
+    }
+
+    // ---------------------------------------------------------------- mapeos
+
+    private function mapProject(): callable
+    {
+        return fn ($p) => [
+            'id' => $p->id,
+            'name' => $p->name,
+            'type' => $p->type->value ?? $p->type,
+            'status' => $p->status->value ?? $p->status,
+            'amount' => (float) $p->total_price,
+            'balance' => (float) $p->balance,
+            'paid_pct' => $p->total_price > 0
+                ? round(($p->total_price - $p->balance) / $p->total_price * 100, 1)
+                : 100,
+        ];
+    }
+
+    private function mapExpiringService(): callable
+    {
+        return function ($service) {
+            $daysLeft = (int) now()->startOfDay()->diffInDays($service->expiration_date, false);
+
+            return [
+                'id' => $service->id,
+                'name' => $service->name,
+                'type' => $service->type,
+                'provider' => $service->provider,
+                'billing_cycle' => $service->billing_cycle,
+                'client_name' => $service->project->client->name ?? 'Sin Cliente',
+                'client_phone' => $service->project->client->phone_number ?? null,
+                'expiration_date' => $service->expiration_date->format('Y-m-d'),
+                'days_left' => $daysLeft,
+                'urgency' => match (true) {
+                    $daysLeft <= 0 => 'expired',
+                    $daysLeft <= 7 => 'critical',
+                    $daysLeft <= 15 => 'warning',
+                    default => 'ok',
+                },
+                'price_mxn' => (float) $service->price_mxn,
+                'cost_mxn' => (float) $service->cost_mxn,
+                'profit_margin' => round((float) ($service->price_mxn - $service->cost_mxn), 2),
+            ];
+        };
+    }
+
+    private function mapServiceMargin(): callable
+    {
+        return function ($service) {
+            $margin = $service->price_mxn - $service->cost_mxn;
+            $divisor = match ($service->billing_cycle) {
+                'monthly' => 1,
+                'quarterly' => 3,
+                'annually' => 12,
+                'biennially' => 24,
+                default => 1,
+            };
+
+            return [
+                'id' => $service->id,
+                'name' => $service->name,
+                'client_name' => $service->project->client->name ?? 'Sin cliente',
+                'billing_cycle' => $service->billing_cycle,
+                'price_mxn' => (float) $service->price_mxn,
+                'cost_mxn' => (float) $service->cost_mxn,
+                'margin_total' => round((float) $margin, 2),
+                'mrr' => round((float) $service->price_mxn / $divisor, 2),
+                'margin_monthly' => round((float) $margin / $divisor, 2),
+            ];
+        };
+    }
+
+    private function mapNotification(): callable
+    {
+        return fn ($n) => [
+            'id' => $n->id,
+            'type' => $n->type,
+            'client_name' => $n->client->name ?? 'Sin cliente',
+            'service_name' => $n->service->name ?? null,
+            'message_body' => $n->message_body,
+            'sent_at' => Carbon::parse($n->sent_at)->format('Y-m-d H:i'),
+            'sent_ago' => Carbon::parse($n->sent_at)->diffForHumans(),
+        ];
+    }
+
+    private function mapClientLtv(): callable
+    {
+        return fn ($c) => [
+            'id' => $c->id,
+            'name' => $c->name,
+            'contact_name' => $c->contact_name,
+            'ltv' => round((float) ($c->payments_sum_amount ?? 0), 2),
+        ];
+    }
+
+    // ---------------------------------------------------------------- fechas SQL
+
+    /**
+     * YEAR() y DATE_FORMAT() son de MySQL. Estaban escritas a pelo, asi que
+     * cualquier entorno con otro motor -las pruebas usan SQLite- reventaba con
+     * "no such function". Estas dos devuelven la expresion del motor en uso.
+     */
+    private function sqlYear(string $columna): string
+    {
+        return DB::connection()->getDriverName() === 'sqlite'
+            ? "CAST(strftime('%Y', {$columna}) AS INTEGER)"
+            : "YEAR({$columna})";
+    }
+
+    private function sqlYearMonth(string $columna): string
+    {
+        return DB::connection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m', {$columna})"
+            : "DATE_FORMAT({$columna}, '%Y-%m')";
     }
 }

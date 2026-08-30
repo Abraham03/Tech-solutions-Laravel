@@ -3,6 +3,7 @@
 namespace App\Traits;
 
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
  * Lectura y saneado de los parametros comunes de un listado paginado.
@@ -34,6 +35,38 @@ trait HandlesListQueries
         return in_array($solicitado, self::PER_PAGE_OPTIONS, true)
             ? $solicitado
             : self::DEFAULT_PER_PAGE;
+    }
+
+    /**
+     * Da a un paginador la misma forma que produce un Resource de Laravel:
+     * data + links + meta.
+     *
+     * Devolver el paginador tal cual lo serializa PLANO, con total y
+     * current_page en la raiz. Eso obligaria al frontend a leer los listados de
+     * dos maneras distintas segun vinieran de un modulo o del dashboard.
+     *
+     * @return array<string, mixed>
+     */
+    protected function paginatedResponse(LengthAwarePaginator $paginator): array
+    {
+        return [
+            'data' => $paginator->items(),
+            'links' => [
+                'first' => $paginator->url(1),
+                'last' => $paginator->url($paginator->lastPage()),
+                'prev' => $paginator->previousPageUrl(),
+                'next' => $paginator->nextPageUrl(),
+            ],
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'from' => $paginator->firstItem(),
+                'last_page' => $paginator->lastPage(),
+                'path' => $paginator->path(),
+                'per_page' => $paginator->perPage(),
+                'to' => $paginator->lastItem(),
+                'total' => $paginator->total(),
+            ],
+        ];
     }
 
     /**

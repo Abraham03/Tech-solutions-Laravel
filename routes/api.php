@@ -37,6 +37,17 @@ Route::middleware('auth:api')->group(function () {
 
         Route::get('/dashboard', [DashboardController::class, 'index']);
 
+        // Listados paginados de cada pestana del dashboard. El resumen de arriba
+        // sigue trayendo recortes cortos para el primer pintado; estos sirven la
+        // pagina que pida el usuario.
+        Route::prefix('dashboard')->group(function () {
+            Route::get('/recent-projects', [DashboardController::class, 'recentProjects']);
+            Route::get('/client-ltv', [DashboardController::class, 'clientLtv']);
+            Route::get('/expiring-services', [DashboardController::class, 'expiringServices']);
+            Route::get('/service-margins', [DashboardController::class, 'serviceMargins']);
+            Route::get('/notifications', [DashboardController::class, 'notifications']);
+        });
+
         // Generación de links de pago (Directamente en el grupo admin, sin anidamientos extra)
         Route::post('/stripe/create-session', [StripeController::class, 'createSession']);
 
