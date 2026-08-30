@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DeviceToken;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Passport\Passport;
@@ -19,62 +20,102 @@ class FcmTokenTest extends TestCase
             ->assertStatus(401);
     }
 
-    public function test_it_stores_the_token_on_the_authenticated_user(): void
+    public function test_it_registers_the_device_of_the_authenticated_user(): void
     {
-        $user = User::factory()->create(['fcm_token' => null]);
+        $user = User::factory()->create();
         Passport::actingAs($user);
 
-        $this->postJson(self::URL, ['fcm_token' => 'token-del-navegador'])
+        $this->postJson(self::URL, ['fcm_token' => 'token-del-navegador', 'platform' => 'web'])
             ->assertOk();
 
-        $this->assertSame('token-del-navegador', $user->fresh()->fcm_token);
+        $this->assertDatabaseHas('device_tokens', [
+            'user_id' => $user->id,
+            'token' => 'token-del-navegador',
+            'platform' => 'web',
+        ]);
     }
 
     /**
-     * FCM rota el token sin avisar, asi que el endpoint tiene que sobrescribir
-     * el anterior en vez de conservarlo.
+     * EL MOTIVO DE ESTA TABLA: con una sola columna en users, registrar el
+     * celular borraba el token del escritorio y ese dejaba de recibir avisos.
      */
-    public function test_it_replaces_a_previously_registered_token(): void
+    public function test_registering_a_second_device_keeps_the_first_one(): void
     {
-        $user = User::factory()->create(['fcm_token' => 'token-viejo']);
+        $user = User::factory()->create();
         Passport::actingAs($user);
 
-        $this->postJson(self::URL, ['fcm_token' => 'token-nuevo'])->assertOk();
+        $this->postJson(self::URL, ['fcm_token' => 'token-escritorio', 'platform' => 'web'])->assertOk();
+        $this->postJson(self::URL, ['fcm_token' => 'token-celular', 'platform' => 'android'])->assertOk();
 
-        $this->assertSame('token-nuevo', $user->fresh()->fcm_token);
+        $this->assertSame(2, $user->deviceTokens()->count());
+        $this->assertDatabaseHas('device_tokens', ['token' => 'token-escritorio']);
+        $this->assertDatabaseHas('device_tokens', ['token' => 'token-celular']);
     }
 
     /**
-     * El token se guarda siempre en el usuario de la sesion: mandar un user_id
-     * en el cuerpo no debe permitir escribir en la cuenta de otro.
+     * FCM puede devolver el mismo token en cada arranque; no debe duplicarse.
      */
-    public function test_it_ignores_a_user_id_sent_by_the_client(): void
+    public function test_registering_the_same_token_twice_does_not_duplicate_it(): void
     {
-        $victima = User::factory()->create(['fcm_token' => null]);
-        $atacante = User::factory()->create(['fcm_token' => null]);
-        Passport::actingAs($atacante);
-
-        $this->postJson(self::URL, [
-            'fcm_token' => 'token-del-atacante',
-            'user_id' => $victima->id,
-        ])->assertOk();
-
-        $this->assertNull($victima->fresh()->fcm_token);
-        $this->assertSame('token-del-atacante', $atacante->fresh()->fcm_token);
-    }
-
-    /**
-     * Al cerrar sesion el token del dispositivo se borra: si no, los avisos de
-     * pagos seguirian llegando a un aparato donde alguien ya salio.
-     */
-    public function test_logging_out_clears_the_device_token(): void
-    {
-        $user = User::factory()->create(['fcm_token' => 'token-del-navegador']);
+        $user = User::factory()->create();
         Passport::actingAs($user);
 
+        $this->postJson(self::URL, ['fcm_token' => 'mismo-token'])->assertOk();
+        $this->postJson(self::URL, ['fcm_token' => 'mismo-token'])->assertOk();
+
+        $this->assertSame(1, DeviceToken::where('token', 'mismo-token')->count());
+    }
+
+    /**
+     * Si alguien inicia sesion en un dispositivo que era de otra cuenta, el
+     * aparato cambia de dueno: no puede seguir recibiendo los pagos del usuario
+     * anterior.
+     */
+    public function test_a_device_reused_by_another_user_changes_owner(): void
+    {
+        $primero = User::factory()->create();
+        $segundo = User::factory()->create();
+
+        Passport::actingAs($primero);
+        $this->postJson(self::URL, ['fcm_token' => 'token-compartido'])->assertOk();
+
+        Passport::actingAs($segundo);
+        $this->postJson(self::URL, ['fcm_token' => 'token-compartido'])->assertOk();
+
+        $this->assertSame(0, $primero->deviceTokens()->count());
+        $this->assertSame(1, $segundo->deviceTokens()->count());
+        $this->assertSame(1, DeviceToken::where('token', 'token-compartido')->count());
+    }
+
+    /**
+     * Al salir se da de baja SOLO el aparato desde el que se cierra sesion.
+     */
+    public function test_logging_out_only_removes_the_device_that_signed_out(): void
+    {
+        $user = User::factory()->create();
+        DeviceToken::factory()->for($user)->create(['token' => 'token-escritorio']);
+        DeviceToken::factory()->for($user)->create(['token' => 'token-celular']);
+
+        Passport::actingAs($user);
+        $this->postJson('/api/logout', ['fcm_token' => 'token-escritorio'])->assertOk();
+
+        $this->assertDatabaseMissing('device_tokens', ['token' => 'token-escritorio']);
+        $this->assertDatabaseHas('device_tokens', ['token' => 'token-celular']);
+    }
+
+    /**
+     * Sin token en la peticion no se puede saber que aparato dar de baja, y
+     * borrarlos todos desconectaria los demas dispositivos del usuario.
+     */
+    public function test_logging_out_without_a_token_keeps_every_device(): void
+    {
+        $user = User::factory()->create();
+        DeviceToken::factory()->for($user)->count(2)->create();
+
+        Passport::actingAs($user);
         $this->postJson('/api/logout')->assertOk();
 
-        $this->assertNull($user->fresh()->fcm_token);
+        $this->assertSame(2, $user->deviceTokens()->count());
     }
 
     public function test_it_rejects_a_missing_token(): void
@@ -87,9 +128,8 @@ class FcmTokenTest extends TestCase
     }
 
     /**
-     * La columna fcm_token admite 255 caracteres. Sin esta regla, un token mas
-     * largo se truncaria en la base y las notificaciones dejarian de llegar sin
-     * que nada lo indicara.
+     * La columna admite 255 caracteres. Sin esta regla, un token mas largo se
+     * truncaria en la base y las notificaciones dejarian de llegar sin aviso.
      */
     public function test_it_rejects_a_token_longer_than_the_column(): void
     {

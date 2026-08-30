@@ -16,10 +16,13 @@ class UpdateFcmTokenRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // max:255 no es arbitrario: es el ancho de la columna fcm_token.
+            // max:255 no es arbitrario: es el ancho de la columna device_tokens.token.
             // Validar aqui devuelve un 422 claro en vez de truncar el token en
             // la base de datos y dejar de recibir notificaciones sin aviso.
             'fcm_token' => 'required|string|max:255',
+            // Etiqueta libre del cliente ('web', 'android'...). Solo sirve para
+            // reconocer los dispositivos al mirarlos en la base.
+            'platform' => 'nullable|string|max:40',
         ];
     }
 

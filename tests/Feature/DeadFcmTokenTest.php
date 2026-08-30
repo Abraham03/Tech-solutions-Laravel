@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\RoleEnum;
+use App\Models\DeviceToken;
 use App\Models\Payment;
 use App\Models\User;
 use App\Notifications\Channels\FirebaseChannel;
@@ -25,32 +26,58 @@ class DeadFcmTokenTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function fakeFirebaseThatRejectsTheToken(): void
+    private function admin(): User
+    {
+        return User::factory()->create(['role' => RoleEnum::ADMIN->value]);
+    }
+
+    private function enviar(User $user): void
+    {
+        app(FirebaseChannel::class)->send(
+            $user,
+            new PaymentReceivedNotification(Payment::factory()->create())
+        );
+    }
+
+    public function test_a_token_rejected_by_firebase_is_removed(): void
     {
         $mock = Mockery::mock(FirebaseService::class);
         $mock->shouldReceive('sendPushNotification')
-            ->andThrow(NotFound::becauseTokenNotFound('token-que-ya-no-sirve'));
-
+            ->andThrow(NotFound::becauseTokenNotFound('muerto'));
         $this->instance(FirebaseService::class, $mock);
+
+        $admin = $this->admin();
+        DeviceToken::factory()->for($admin)->create(['token' => 'muerto']);
+
+        $this->enviar($admin);
+
+        $this->assertDatabaseMissing('device_tokens', ['token' => 'muerto']);
     }
 
-    public function test_a_token_rejected_by_firebase_is_removed_from_the_user(): void
+    /**
+     * LA RAZON DE ENVIAR UNO POR UNO: que el celular haya caducado no puede
+     * impedir que el aviso llegue al escritorio.
+     */
+    public function test_a_dead_device_does_not_block_the_healthy_one(): void
     {
-        $this->fakeFirebaseThatRejectsTheToken();
+        $mock = Mockery::mock(FirebaseService::class);
+        $mock->shouldReceive('sendPushNotification')
+            ->with('muerto', Mockery::any(), Mockery::any(), Mockery::any(), Mockery::any())
+            ->andThrow(NotFound::becauseTokenNotFound('muerto'));
+        $mock->shouldReceive('sendPushNotification')
+            ->with('vivo', Mockery::any(), Mockery::any(), Mockery::any(), Mockery::any())
+            ->once()
+            ->andReturn('ok');
+        $this->instance(FirebaseService::class, $mock);
 
-        $admin = User::factory()->create([
-            'role' => RoleEnum::ADMIN->value,
-            'fcm_token' => 'token-que-ya-no-sirve',
-        ]);
-        $payment = Payment::factory()->create();
+        $admin = $this->admin();
+        DeviceToken::factory()->for($admin)->create(['token' => 'muerto']);
+        DeviceToken::factory()->for($admin)->create(['token' => 'vivo']);
 
-        $canal = app(FirebaseChannel::class);
-        $canal->send($admin, new PaymentReceivedNotification($payment));
+        $this->enviar($admin);
 
-        $this->assertNull(
-            $admin->fresh()->fcm_token,
-            'El token muerto debe borrarse para que el sistema deje de intentarlo.'
-        );
+        $this->assertDatabaseMissing('device_tokens', ['token' => 'muerto']);
+        $this->assertDatabaseHas('device_tokens', ['token' => 'vivo']);
     }
 
     /**
@@ -59,34 +86,27 @@ class DeadFcmTokenTest extends TestCase
      */
     public function test_a_dead_token_does_not_raise_an_exception(): void
     {
-        $this->fakeFirebaseThatRejectsTheToken();
+        $mock = Mockery::mock(FirebaseService::class);
+        $mock->shouldReceive('sendPushNotification')
+            ->andThrow(NotFound::becauseTokenNotFound('muerto'));
+        $this->instance(FirebaseService::class, $mock);
 
-        $admin = User::factory()->create([
-            'role' => RoleEnum::ADMIN->value,
-            'fcm_token' => 'token-que-ya-no-sirve',
-        ]);
-        $payment = Payment::factory()->create();
+        $admin = $this->admin();
+        DeviceToken::factory()->for($admin)->create(['token' => 'muerto']);
 
-        $canal = app(FirebaseChannel::class);
+        $this->enviar($admin);
 
-        $this->assertNull($canal->send($admin, new PaymentReceivedNotification($payment)));
+        $this->assertTrue(true, 'El canal no debe propagar la excepcion.');
     }
 
-    public function test_a_user_without_token_is_skipped_without_touching_firebase(): void
+    public function test_a_user_without_devices_never_calls_firebase(): void
     {
-        // Si el canal llamara a Firebase, Mockery fallaria: no hay expectativa.
         $mock = Mockery::mock(FirebaseService::class);
         $mock->shouldNotReceive('sendPushNotification');
         $this->instance(FirebaseService::class, $mock);
 
-        $admin = User::factory()->create([
-            'role' => RoleEnum::ADMIN->value,
-            'fcm_token' => null,
-        ]);
-        $payment = Payment::factory()->create();
+        $this->enviar($this->admin());
 
-        $canal = app(FirebaseChannel::class);
-
-        $this->assertNull($canal->send($admin, new PaymentReceivedNotification($payment)));
+        $this->assertTrue(true, 'Sin dispositivos no se llama a Firebase.');
     }
 }

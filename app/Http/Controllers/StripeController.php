@@ -183,11 +183,11 @@ class StripeController extends Controller
             // desaparecia sin que nada lo dijera. Ademas ahora avisa a todos los
             // administradores, no solo al primero.
             $admins = User::where('role', RoleEnum::ADMIN->value)
-                ->whereNotNull('fcm_token')
+                ->whereHas('deviceTokens')
                 ->get();
 
             if ($admins->isEmpty()) {
-                Log::info("Webhook {$event->id}: ningun administrador tiene fcm_token registrado; no se envia push.");
+                Log::info("Webhook {$event->id}: ningun administrador tiene dispositivos registrados; no se envia push.");
             } else {
                 Notification::send($admins, new PaymentReceivedNotification($payment));
             }

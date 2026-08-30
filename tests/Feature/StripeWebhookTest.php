@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\PaymentStatusEnum;
 use App\Enums\PaymentTypeEnum;
 use App\Enums\RoleEnum;
+use App\Models\DeviceToken;
 use App\Models\Payment;
 use App\Models\Project;
 use App\Models\Service;
@@ -116,24 +117,19 @@ class StripeWebhookTest extends TestCase
     }
 
     /**
-     * El aviso va a los administradores con token de Firebase, no al usuario 1.
+     * El aviso va a los administradores con algun dispositivo registrado.
      * Antes era User::find(1): un id supuesto que, al cambiar, dejaba de avisar
      * sin que nada lo indicara.
      */
-    public function test_the_push_goes_to_every_admin_with_a_firebase_token(): void
+    public function test_the_push_goes_to_every_admin_with_a_registered_device(): void
     {
-        $conToken = User::factory()->create([
-            'role' => RoleEnum::ADMIN->value,
-            'fcm_token' => 'token-de-firebase',
-        ]);
-        $adminSinToken = User::factory()->create([
-            'role' => RoleEnum::ADMIN->value,
-            'fcm_token' => null,
-        ]);
-        $cliente = User::factory()->create([
-            'role' => RoleEnum::CLIENT->value,
-            'fcm_token' => 'token-de-cliente',
-        ]);
+        $conDispositivo = User::factory()->create(['role' => RoleEnum::ADMIN->value]);
+        DeviceToken::factory()->for($conDispositivo)->create();
+
+        $adminSinDispositivo = User::factory()->create(['role' => RoleEnum::ADMIN->value]);
+
+        $cliente = User::factory()->create(['role' => RoleEnum::CLIENT->value]);
+        DeviceToken::factory()->for($cliente)->create();
 
         $project = Project::factory()->completed()->create(['total_price' => 25000]);
         $service = Service::factory()->create(['project_id' => $project->id]);
@@ -145,8 +141,8 @@ class StripeWebhookTest extends TestCase
             'payment_type' => 'renewal',
         ]))->assertOk();
 
-        Notification::assertSentTo($conToken, PaymentReceivedNotification::class);
-        Notification::assertNotSentTo($adminSinToken, PaymentReceivedNotification::class);
+        Notification::assertSentTo($conDispositivo, PaymentReceivedNotification::class);
+        Notification::assertNotSentTo($adminSinDispositivo, PaymentReceivedNotification::class);
         Notification::assertNotSentTo($cliente, PaymentReceivedNotification::class);
     }
 

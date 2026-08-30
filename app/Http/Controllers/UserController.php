@@ -7,6 +7,7 @@ use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateFcmTokenRequest;
 use App\Http\Requests\User\UpdateUserRequest; // <-- Nueva importación
 use App\Http\Resources\UserResource;
+use App\Models\DeviceToken;
 use App\Models\User;
 use App\Services\AuthService;
 use App\Services\UserService;
@@ -43,7 +44,10 @@ class UserController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $this->authService->logout($request->user());
+        // El token identifica al dispositivo que cierra sesion. Sin el no se
+        // puede saber cual dar de baja, y darlos de baja todos desconectaria los
+        // demas aparatos del usuario.
+        $this->authService->logout($request->user(), $request->input('fcm_token'));
 
         return $this->successResponse(null, 'Sesión cerrada correctamente.');
     }
@@ -61,9 +65,20 @@ class UserController extends Controller
      */
     public function updateFcmToken(UpdateFcmTokenRequest $request): JsonResponse
     {
-        $request->user()->forceFill([
-            'fcm_token' => $request->validated()['fcm_token'],
-        ])->save();
+        $datos = $request->validated();
+
+        // updateOrCreate por token y no por usuario: si alguien inicia sesion en
+        // un dispositivo ya registrado con otra cuenta, la fila cambia de dueno
+        // en vez de duplicarse. Y registrar el celular ya no borra el token del
+        // escritorio, que era el problema de la columna unica.
+        DeviceToken::updateOrCreate(
+            ['token' => $datos['fcm_token']],
+            [
+                'user_id' => $request->user()->id,
+                'platform' => $datos['platform'] ?? null,
+                'last_used_at' => now(),
+            ]
+        );
 
         return $this->successResponse(null, 'Token de notificaciones registrado.');
     }

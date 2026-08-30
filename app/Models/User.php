@@ -18,7 +18,8 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
-        'fcm_token',
+        // fcm_token se conserva en la tabla por compatibilidad, pero ya no se
+        // escribe: los tokens viven en device_tokens, uno por dispositivo.
     ];
 
     protected $hidden = [
@@ -33,6 +34,15 @@ class User extends Authenticatable
             'password' => 'hashed',
             'role' => RoleEnum::class,
         ];
+    }
+
+    /**
+     * Dispositivos donde este usuario recibe notificaciones push.
+     * Uno por navegador o aplicacion instalada.
+     */
+    public function deviceTokens()
+    {
+        return $this->hasMany(DeviceToken::class);
     }
 
     // Un usuario (con rol 'client') tiene un perfil en el CRM

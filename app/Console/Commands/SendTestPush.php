@@ -11,7 +11,7 @@ class SendTestPush extends Command
 {
     protected $signature = 'push:test {user : ID o correo del usuario que recibira la prueba}';
 
-    protected $description = 'Envia una notificacion push de prueba para verificar la cadena de Firebase de extremo a extremo';
+    protected $description = 'Envia una notificacion push de prueba a todos los dispositivos de un usuario';
 
     /**
      * FirebaseService se inyecta aqui y NO en el constructor: artisan instancia
@@ -34,45 +34,62 @@ class SendTestPush extends Command
             return self::FAILURE;
         }
 
-        if (blank($user->fcm_token)) {
-            $this->error("{$user->name} no tiene fcm_token registrado.");
-            $this->line('La app debe llamar a POST /api/me/fcm-token con el token que le da Firebase.');
+        $devices = $user->deviceTokens()->get();
+
+        if ($devices->isEmpty()) {
+            $this->error("{$user->name} no tiene dispositivos registrados.");
+            $this->line('Inicia sesion en el panel desde el dispositivo donde quieras recibir los avisos.');
 
             return self::FAILURE;
         }
 
-        $this->info("Enviando prueba a {$user->name} <{$user->email}>...");
+        $this->info("Enviando prueba a {$user->name} <{$user->email}> en {$devices->count()} dispositivo(s)...");
 
-        try {
-            $result = $firebase->sendPushNotification(
-                $user->fcm_token,
-                'Prueba de notificaciones',
-                'Si ves esto, la cadena de Firebase funciona de extremo a extremo.',
-                ['tipo' => 'prueba'],
-                config('services.firebase.payments_url'),
-            );
-        } catch (NotFound $e) {
-            // El token murio (se reemplazo el service worker, se limpiaron los
-            // datos del sitio, se desinstalo la PWA...). Se borra para que el
-            // sistema deje de intentarlo.
-            $user->forceFill(['fcm_token' => null])->save();
+        $enviados = 0;
+        $caducados = 0;
 
-            $this->error('El token de este usuario ya no esta registrado en Firebase; se elimino de la base.');
-            $this->line('Vuelve a iniciar sesion en el panel para registrar uno nuevo.');
+        foreach ($devices as $device) {
+            $etiqueta = $device->platform ?: 'sin etiqueta';
 
+            try {
+                $resultado = $firebase->sendPushNotification(
+                    $device->token,
+                    'Prueba de notificaciones',
+                    'Si ves esto, la cadena de Firebase funciona de extremo a extremo.',
+                    ['tipo' => 'prueba'],
+                    config('services.firebase.payments_url'),
+                );
+
+                if ($resultado === false) {
+                    $this->error("  dispositivo #{$device->id} ({$etiqueta}): Firebase rechazo el envio. Detalle en storage/logs/laravel.log.");
+
+                    continue;
+                }
+
+                $this->line("  dispositivo #{$device->id} ({$etiqueta}): enviado");
+                $enviados++;
+            } catch (NotFound $e) {
+                // Token muerto: se da de baja este dispositivo y se sigue con
+                // los demas, que pueden estar perfectamente vivos.
+                $device->delete();
+                $caducados++;
+
+                $this->warn("  dispositivo #{$device->id} ({$etiqueta}): ya no esta registrado en Firebase; eliminado.");
+            }
+        }
+
+        if ($caducados > 0) {
+            $this->line("Se dieron de baja {$caducados} dispositivo(s) caducado(s). Vuelve a iniciar sesion en ellos para registrarlos.");
+        }
+
+        if ($enviados === 0) {
             return self::FAILURE;
         }
 
-        if ($result === false) {
-            $this->error('Firebase rechazo el envio. El motivo exacto esta en storage/logs/laravel.log.');
-
-            return self::FAILURE;
-        }
-
-        $this->info('Notificacion enviada. Si no aparece en el dispositivo, revisa:');
-        $this->line('  - que el permiso de notificaciones este concedido en ese navegador;');
-        $this->line('  - que el service worker firebase-messaging-sw.js este servido desde la raiz;');
-        $this->line('  - en iOS, que la PWA este instalada en la pantalla de inicio (en pestana no llega).');
+        $this->info("Enviada a {$enviados} dispositivo(s). Si no aparece, revisa:");
+        $this->line('  - el permiso de notificaciones en ese navegador;');
+        $this->line('  - en Android, que el canal "Sites" de Chrome este activado;');
+        $this->line('  - en iOS, que la PWA este instalada en la pantalla de inicio.');
 
         return self::SUCCESS;
     }
