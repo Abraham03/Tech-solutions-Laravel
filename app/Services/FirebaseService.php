@@ -37,6 +37,42 @@ class FirebaseService
     }
 
     /**
+     * Construye el mensaje que se manda a FCM.
+     *
+     * SIN bloque 'notification' a proposito. Cuando el payload lo incluye, el
+     * SDK de Firebase pinta la notificacion por su cuenta Y ADEMAS dispara
+     * onBackgroundMessage en el service worker, que la pinta otra vez: el
+     * usuario recibia el mismo aviso duplicado, cada copia con un icono
+     * distinto.
+     *
+     * Enviandolo como data-only, el service worker es el unico que muestra, y
+     * ademas conserva el control del icono, del tag y del enlace del clic.
+     *
+     * Nota para el futuro: un cliente nativo (Flutter) no muestra nada por si
+     * solo con data-only. Cuando exista, habra que enviarle a el si el bloque
+     * 'notification' y distinguir por plataforma.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildPayload(string $deviceToken, string $title, string $body, array $data = [], ?string $link = null): array
+    {
+        // FCM exige que todos los valores de 'data' sean cadenas.
+        $carga = array_map(static fn ($valor) => (string) $valor, $data);
+
+        $carga['title'] = $title;
+        $carga['body'] = $body;
+
+        if (filled($link)) {
+            $carga['link'] = $link;
+        }
+
+        return [
+            'token' => $deviceToken,
+            'data' => $carga,
+        ];
+    }
+
+    /**
      * Envía una notificación a un dispositivo específico mediante su Token.
      *
      * @param  string|null  $link  URL que abre el clic en navegadores web. Los
@@ -46,24 +82,9 @@ class FirebaseService
     public function sendPushNotification(string $deviceToken, string $title, string $body, array $data = [], ?string $link = null)
     {
         try {
-            $payload = [
-                'token' => $deviceToken,
-                'notification' => [
-                    'title' => $title,
-                    'body' => $body,
-                ],
-                'data' => $data,
-            ];
-
-            // En web, FCM no usa data.click_action para abrir una pantalla:
-            // el destino del clic se declara en webpush.fcm_options.link.
-            if (filled($link)) {
-                $payload['webpush'] = [
-                    'fcm_options' => ['link' => $link],
-                ];
-            }
-
-            return $this->messaging()->send(CloudMessage::fromArray($payload));
+            return $this->messaging()->send(
+                CloudMessage::fromArray($this->buildPayload($deviceToken, $title, $body, $data, $link))
+            );
         } catch (NotFound $e) {
             // "Device unregistered": el token ya no sirve. Pasa cuando se
             // desinstala la app, se limpian los datos del sitio o se reemplaza
