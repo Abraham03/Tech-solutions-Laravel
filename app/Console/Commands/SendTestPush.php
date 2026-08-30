@@ -9,7 +9,9 @@ use Kreait\Firebase\Exception\Messaging\NotFound;
 
 class SendTestPush extends Command
 {
-    protected $signature = 'push:test {user : ID o correo del usuario que recibira la prueba}';
+    protected $signature = 'push:test
+        {user : ID o correo del usuario que recibira la prueba}
+        {--device= : Enviar solo a este id de device_tokens, para aislar un dispositivo}';
 
     protected $description = 'Envia una notificacion push de prueba a todos los dispositivos de un usuario';
 
@@ -34,7 +36,13 @@ class SendTestPush extends Command
             return self::FAILURE;
         }
 
-        $devices = $user->deviceTokens()->get();
+        $consulta = $user->deviceTokens();
+
+        if ($idDispositivo = $this->option('device')) {
+            $consulta->where('id', $idDispositivo);
+        }
+
+        $devices = $consulta->get();
 
         if ($devices->isEmpty()) {
             $this->error("{$user->name} no tiene dispositivos registrados.");
@@ -66,7 +74,14 @@ class SendTestPush extends Command
                     continue;
                 }
 
-                $this->line("  dispositivo #{$device->id} ({$etiqueta}): enviado");
+                // El id que devuelve FCM es la prueba de que acepto ESTE envio en
+                // concreto. Se puede buscar en la consola de Firebase para ver
+                // que hizo con el mensaje.
+                $idMensaje = is_array($resultado) ? ($resultado['name'] ?? '(sin id)') : '(sin id)';
+                $finalToken = substr($device->token, -12);
+
+                $this->line("  dispositivo #{$device->id} ({$etiqueta}) token ...{$finalToken}");
+                $this->line("      FCM: {$idMensaje}");
                 $enviados++;
             } catch (NotFound $e) {
                 // Token muerto: se da de baja este dispositivo y se sigue con
