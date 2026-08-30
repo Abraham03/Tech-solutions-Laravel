@@ -8,11 +8,13 @@ use App\Http\Resources\ServiceResource;
 use App\Models\Service;
 use App\Services\InfrastructureService;
 use App\Traits\ApiResponseTrait;
+use App\Traits\HandlesListQueries;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ServiceController extends Controller
 {
-    use ApiResponseTrait;
+    use ApiResponseTrait, HandlesListQueries;
 
     protected $infrastructureService;
 
@@ -21,9 +23,12 @@ class ServiceController extends Controller
         $this->infrastructureService = $infrastructureService;
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $services = $this->infrastructureService->getAllPaginated();
+        $services = $this->infrastructureService->getAllPaginated(
+            $this->perPage($request),
+            $this->searchTerm($request)
+        );
 
         return $this->successResponse(
             ServiceResource::collection($services)->response()->getData(true),

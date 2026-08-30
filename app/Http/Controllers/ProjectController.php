@@ -8,11 +8,13 @@ use App\Http\Resources\ProjectResource;
 use App\Models\Project;
 use App\Services\ProjectService;
 use App\Traits\ApiResponseTrait;
+use App\Traits\HandlesListQueries;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ProjectController extends Controller
 {
-    use ApiResponseTrait;
+    use ApiResponseTrait, HandlesListQueries;
 
     protected $projectService;
 
@@ -21,9 +23,12 @@ class ProjectController extends Controller
         $this->projectService = $projectService;
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $projects = $this->projectService->getAllPaginated();
+        $projects = $this->projectService->getAllPaginated(
+            $this->perPage($request),
+            $this->searchTerm($request)
+        );
 
         return $this->successResponse(
             ProjectResource::collection($projects)->response()->getData(true),

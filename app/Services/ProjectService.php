@@ -7,10 +7,21 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 class ProjectService
 {
-    public function getAllPaginated(int $perPage = 15): LengthAwarePaginator
+    public function getAllPaginated(int $perPage = 15, ?string $search = null): LengthAwarePaginator
     {
         // with('client') optimiza la consulta SQL (Eager Loading)
-        return Project::with('client')->latest()->paginate($perPage);
+        return Project::with('client')
+            ->when($search, fn ($q) => $q->where(function ($sub) use ($search) {
+                $sub->where('name', 'like', "%{$search}%")
+                    ->orWhere('type', 'like', "%{$search}%")
+                    ->orWhere('status', 'like', "%{$search}%")
+                    // Buscar tambien por cliente: es como se busca un proyecto
+                    // en la practica cuando no recuerdas su nombre exacto.
+                    ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%{$search}%"));
+            }))
+            ->latest()
+            ->paginate($perPage)
+            ->withQueryString();
     }
 
     public function createProject(array $data): Project

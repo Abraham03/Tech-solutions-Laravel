@@ -8,11 +8,13 @@ use App\Http\Resources\PaymentResource;
 use App\Models\Payment;
 use App\Services\PaymentService;
 use App\Traits\ApiResponseTrait;
+use App\Traits\HandlesListQueries;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class PaymentController extends Controller
 {
-    use ApiResponseTrait;
+    use ApiResponseTrait, HandlesListQueries;
 
     protected $paymentService;
 
@@ -21,9 +23,12 @@ class PaymentController extends Controller
         $this->paymentService = $paymentService;
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $payments = $this->paymentService->getAllPaginated();
+        $payments = $this->paymentService->getAllPaginated(
+            $this->perPage($request),
+            $this->searchTerm($request)
+        );
 
         return $this->successResponse(
             PaymentResource::collection($payments)->response()->getData(true),

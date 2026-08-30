@@ -8,11 +8,13 @@ use App\Http\Resources\ClientResource;
 use App\Models\Client;
 use App\Services\ClientService;
 use App\Traits\ApiResponseTrait;
+use App\Traits\HandlesListQueries;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ClientController extends Controller
 {
-    use ApiResponseTrait;
+    use ApiResponseTrait, HandlesListQueries;
 
     protected $clientService;
 
@@ -22,9 +24,12 @@ class ClientController extends Controller
         $this->clientService = $clientService;
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $clients = $this->clientService->getAllPaginated();
+        $clients = $this->clientService->getAllPaginated(
+            $this->perPage($request),
+            $this->searchTerm($request)
+        );
 
         // Devolvemos la colección transformada por nuestro Resource
         return $this->successResponse(

@@ -13,9 +13,20 @@ use Illuminate\Validation\ValidationException;
 
 class PaymentService
 {
-    public function getAllPaginated(int $perPage = 15): LengthAwarePaginator
+    public function getAllPaginated(int $perPage = 15, ?string $search = null): LengthAwarePaginator
     {
-        return Payment::with(['client', 'project', 'service'])->latest()->paginate($perPage);
+        return Payment::with(['client', 'project', 'service'])
+            ->when($search, fn ($q) => $q->where(function ($sub) use ($search) {
+                $sub->where('payment_method', 'like', "%{$search}%")
+                    ->orWhere('payment_type', 'like', "%{$search}%")
+                    ->orWhere('status', 'like', "%{$search}%")
+                    // Util para rastrear un cobro concreto desde el panel de Stripe.
+                    ->orWhere('stripe_payment_intent_id', 'like', "%{$search}%")
+                    ->orWhereHas('client', fn ($c) => $c->where('name', 'like', "%{$search}%"));
+            }))
+            ->latest()
+            ->paginate($perPage)
+            ->withQueryString();
     }
 
     public function createPayment(array $data): Payment

@@ -9,10 +9,20 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 class InfrastructureService
 {
-    public function getAllPaginated(int $perPage = 15): LengthAwarePaginator
+    public function getAllPaginated(int $perPage = 15, ?string $search = null): LengthAwarePaginator
     {
         // Traemos el servicio junto con el proyecto al que pertenece
-        return Service::with('project')->latest()->paginate($perPage);
+        return Service::with('project')
+            ->when($search, fn ($q) => $q->where(function ($sub) use ($search) {
+                $sub->where('name', 'like', "%{$search}%")
+                    ->orWhere('provider', 'like', "%{$search}%")
+                    ->orWhere('type', 'like', "%{$search}%")
+                    ->orWhere('status', 'like', "%{$search}%")
+                    ->orWhereHas('project', fn ($p) => $p->where('name', 'like', "%{$search}%"));
+            }))
+            ->latest()
+            ->paginate($perPage)
+            ->withQueryString();
     }
 
     public function createService(array $data): Service

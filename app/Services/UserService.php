@@ -3,17 +3,29 @@
 namespace App\Services;
 
 use App\Models\User;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Hash;
 
 class UserService
 {
     /**
-     * Obtiene todos los usuarios ordenados por los más recientes.
+     * Obtiene los usuarios paginados, con busqueda opcional.
+     *
+     * Antes devolvia la tabla entera con get(): con unas decenas de usuarios da
+     * igual, pero es el unico modulo que no paginaba y no hay motivo para que
+     * se comporte distinto de los demas.
      */
-    public function getAllUsers(): Collection
+    public function getAllPaginated(int $perPage = 15, ?string $search = null): LengthAwarePaginator
     {
-        return User::orderBy('created_at', 'desc')->get();
+        return User::query()
+            ->when($search, fn ($q) => $q->where(function ($sub) use ($search) {
+                $sub->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('role', 'like', "%{$search}%");
+            }))
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage)
+            ->withQueryString();
     }
 
     /**

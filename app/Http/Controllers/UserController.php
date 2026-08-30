@@ -12,12 +12,13 @@ use App\Models\User;
 use App\Services\AuthService;
 use App\Services\UserService;
 use App\Traits\ApiResponseTrait;
+use App\Traits\HandlesListQueries;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class UserController extends Controller
 {
-    use ApiResponseTrait;
+    use ApiResponseTrait, HandlesListQueries;
 
     protected $authService;
 
@@ -85,12 +86,18 @@ class UserController extends Controller
 
     // --- MÉTODOS CRUD DE USUARIOS (Nuevos) ---
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $users = $this->userService->getAllUsers();
+        $users = $this->userService->getAllPaginated(
+            $this->perPage($request),
+            $this->searchTerm($request)
+        );
 
+        // ->response()->getData(true) para devolver data + links + meta, igual
+        // que el resto de listados. Antes este era el unico que respondia con un
+        // array plano, asi que el frontend tenia que tratarlo aparte.
         return $this->successResponse(
-            UserResource::collection($users),
+            UserResource::collection($users)->response()->getData(true),
             'Lista de usuarios obtenida.'
         );
     }
