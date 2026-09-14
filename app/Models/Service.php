@@ -22,6 +22,8 @@ class Service extends Model
         'billing_cycle',
         'expiration_date',
         'status',
+        'basketpro_tenant_code',
+        'basketpro_plan_code',
     ];
 
     protected $casts = [

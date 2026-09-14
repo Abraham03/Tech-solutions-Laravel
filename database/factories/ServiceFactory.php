@@ -31,6 +31,21 @@ class ServiceFactory extends Factory
     }
 
     /**
+     * Suscripcion de BasketPro ya ligada a su cuenta.
+     */
+    public function basketpro(string $tenantCode = 'leones'): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => ServiceTypeEnum::BASKETPRO_SUBSCRIPTION->value,
+            'provider' => 'TechSolutions',
+            'name' => "BasketPro {$tenantCode}",
+            'billing_cycle' => 'monthly',
+            'basketpro_tenant_code' => $tenantCode,
+            'basketpro_plan_code' => 'starter',
+        ]);
+    }
+
+    /**
      * Servicio vencido hace $days dias, todavia marcado como activo.
      */
     public function overdue(int $days = 60): static
