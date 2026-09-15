@@ -58,4 +58,13 @@ return [
         ],
     ],
 
+    'basketpro' => [
+        // BasketPro obedece a lo que se cobra aqui: alta de cuentas, plan y vigencia.
+        // El token es el MISMO que BASKETPRO_SERVICE_TOKEN en el .env de BasketPro.
+        'url' => env('BASKETPRO_API_URL'),
+        'token' => env('BASKETPRO_SERVICE_TOKEN'),
+        // El alta migra una base de datos completa: ~18 s medidos en local.
+        'timeout' => (int) env('BASKETPRO_TIMEOUT', 120),
+    ],
+
 ];

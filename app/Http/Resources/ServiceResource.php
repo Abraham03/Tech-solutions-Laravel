@@ -21,6 +21,9 @@ class ServiceResource extends JsonResource
             'billing_cycle' => $this->billing_cycle,
             'expiration_date' => $this->expiration_date->format('Y-m-d'),
             'status' => $this->status->value,
+            // Solo en servicios de BasketPro: la cuenta que cobra este servicio y su plan.
+            'basketpro_tenant_code' => $this->basketpro_tenant_code,
+            'basketpro_plan_code' => $this->basketpro_plan_code,
         ];
     }
 }

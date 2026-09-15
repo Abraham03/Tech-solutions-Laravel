@@ -26,6 +26,10 @@ class UpdateServiceRequest extends FormRequest
             'billing_cycle' => 'sometimes|in:monthly,quarterly,annually,biennially,one-time',
             'expiration_date' => 'sometimes|required|date',
             'status' => ['sometimes', 'required', new Enum(ServiceStatusEnum::class)],
+
+            // De una cuenta de BasketPro ya creada solo se cambia el plan desde aquí.
+            'basketpro' => ['sometimes', 'array'],
+            'basketpro.plan_code' => ['sometimes', 'required', 'string', 'max:30'],
         ];
     }
 }
