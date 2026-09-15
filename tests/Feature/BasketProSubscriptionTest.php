@@ -25,6 +25,8 @@ class BasketProSubscriptionTest extends TestCase
 
     private const PASSWORD = 'Srv4Prueba9qX';
 
+    private const DB_PASSWORD = 'Clave-de-hPanel-9';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -51,6 +53,8 @@ class BasketProSubscriptionTest extends TestCase
             'basketpro' => [
                 'account_code' => 'leones',
                 'database_name' => 'u525153682_leones',
+                'database_username' => 'u525153682_leones_user',
+                'database_password' => self::DB_PASSWORD,
                 'league_code' => 'liga-leones',
                 'league_name' => 'Liga Leones',
                 'admin_name' => 'Admin Leones',
@@ -82,11 +86,37 @@ class BasketProSubscriptionTest extends TestCase
             && $request['name'] === $clientName
             && $request['code'] === 'leones'
             && $request['admin_password'] === self::PASSWORD
+            && $request['database_username'] === 'u525153682_leones_user'
+            && $request['database_password'] === self::DB_PASSWORD
             && $request['valid_until'] === '2026-10-14');
 
-        // La contraseña viaja a BasketPro y a ningún otro lado.
-        $this->assertStringNotContainsString(self::PASSWORD, $response->getContent());
-        $this->assertStringNotContainsString(self::PASSWORD, json_encode($service->getAttributes()));
+        // Las contraseñas viajan a BasketPro y a ningún otro lado.
+        foreach ([self::PASSWORD, self::DB_PASSWORD] as $secret) {
+            $this->assertStringNotContainsString($secret, $response->getContent());
+            $this->assertStringNotContainsString($secret, json_encode($service->getAttributes()));
+        }
+    }
+
+    public function test_every_validation_reason_from_basketpro_reaches_the_form(): void
+    {
+        // Laravel resume los rechazos de validación en `message` con un "(and 1 more error)"
+        // en inglés; el admin tiene que ver cada motivo, en español.
+        Http::fake([self::URL.'/*' => Http::response([
+            'message' => 'La contraseña del administrador debe tener al menos un número. (and 1 more error)',
+            'errors' => [
+                'admin_password' => ['La contraseña del administrador debe tener al menos un número.'],
+                'database_password' => ['Falta la contraseña del usuario de la base.'],
+            ],
+        ], 422)]);
+
+        $this->postJson('/api/admin/services', $this->basketProPayload())
+            ->assertStatus(422)
+            ->assertJsonPath(
+                'errors.basketpro.0',
+                'BasketPro La contraseña del administrador debe tener al menos un número. Falta la contraseña del usuario de la base.'
+            );
+
+        $this->assertDatabaseCount('services', 0);
     }
 
     public function test_a_rejected_account_does_not_leave_the_service_behind(): void
@@ -125,7 +155,12 @@ class BasketProSubscriptionTest extends TestCase
 
         $this->postJson('/api/admin/services', $payload)
             ->assertStatus(422)
-            ->assertJsonValidationErrors(['basketpro.account_code', 'basketpro.admin_password']);
+            ->assertJsonValidationErrors([
+                'basketpro.account_code',
+                'basketpro.admin_password',
+                'basketpro.database_username',
+                'basketpro.database_password',
+            ]);
 
         Http::assertNothingSent();
     }

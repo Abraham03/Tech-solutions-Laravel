@@ -72,6 +72,8 @@ class InfrastructureService
                 'name' => $service->project->client->name,
                 'code' => $basketpro['account_code'],
                 'database_name' => $basketpro['database_name'],
+                'database_username' => $basketpro['database_username'],
+                'database_password' => $basketpro['database_password'],
                 'league_code' => $basketpro['league_code'],
                 'league_name' => $basketpro['league_name'],
                 'admin_name' => $basketpro['admin_name'],
