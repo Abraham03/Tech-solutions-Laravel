@@ -33,6 +33,10 @@ class StoreServiceRequest extends FormRequest
             'basketpro' => ['required_if:type,basketpro_subscription', 'array'],
             'basketpro.account_code' => ['required_if:type,basketpro_subscription', 'string', 'max:30', 'unique:services,basketpro_tenant_code'],
             'basketpro.database_name' => ['required_if:type,basketpro_subscription', 'string', 'max:64'],
+            // En Hostinger cada base tiene su propio usuario MySQL y es el único que la alcanza:
+            // BasketPro se conecta con estos datos. Viajan a BasketPro y no se guardan aquí.
+            'basketpro.database_username' => ['required_if:type,basketpro_subscription', 'string', 'max:80'],
+            'basketpro.database_password' => ['required_if:type,basketpro_subscription', 'string', 'max:255'],
             'basketpro.league_code' => ['required_if:type,basketpro_subscription', 'string', 'max:30'],
             'basketpro.league_name' => ['required_if:type,basketpro_subscription', 'string', 'max:150'],
             'basketpro.admin_name' => ['required_if:type,basketpro_subscription', 'string', 'max:100'],

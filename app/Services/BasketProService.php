@@ -64,8 +64,12 @@ class BasketProService
         }
 
         if ($response->failed()) {
+            // Un rechazo de validación trae cada motivo en `errors`, y `message` solo resume
+            // el primero con un "(and N more errors)" en inglés: se muestran todos.
+            $errors = collect((array) $response->json('errors', []))->flatten()->filter()->implode(' ');
+
             throw new BasketProException(
-                (string) ($response->json('message') ?? "respondió {$response->status()}."),
+                $errors !== '' ? $errors : (string) ($response->json('message') ?? "respondió {$response->status()}."),
                 (string) ($response->json('code') ?? "http_{$response->status()}"),
             );
         }
